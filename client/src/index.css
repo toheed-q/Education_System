@@ -8,11 +8,11 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
 
-  /* Brand Colors - Orange & Blue */
-  --primary: 217 91% 60%;      /* Blue #3B82F6 */
+  /* Brand Colors - LernenTech Orange (#F59E0B) & Navy (#1E3A5F) */
+  --primary: 38 92% 50%;       /* Orange #F59E0B - Main Action Color */
   --primary-foreground: 0 0% 100%;
   
-  --secondary: 38 92% 50%;     /* Orange #F59E0B */
+  --secondary: 209 54% 24%;    /* Navy #1E3A5F - Text/Secondary */
   --secondary-foreground: 0 0% 100%;
 
   --background: 210 40% 98%;   /* Soft Blue-Grey */

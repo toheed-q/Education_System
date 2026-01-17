@@ -193,48 +193,181 @@ export async function registerRoutes(
   });
 
   // Seed Data
-  if (process.env.NODE_ENV !== "production") {
-    const count = await storage.countUsers();
-    if (count === 0) {
-      console.log("Seeding database...");
-      const password = await argon2.hash("password123");
-      
-      // Admin
-      await storage.createUser({
-        email: "admin@lernentech.com",
-        password,
-        name: "Super Admin",
-        role: "super_admin",
-        isVerified: true
-      });
+  const userCount = await storage.countUsers();
+  const programCount = await storage.countPrograms();
+  
+  if (userCount === 0) {
+    console.log("Seeding users...");
+    const password = await argon2.hash("password123");
+    
+    // Super Admin (per requirements)
+    await storage.createUser({
+      email: "esthernjane@gmail.com",
+      password,
+      name: "Esther Njane",
+      role: "super_admin",
+      isVerified: true
+    });
 
-      // Tutor
-      const tutor = await storage.createUser({
-        email: "tutor@lernentech.com",
-        password,
-        name: "Jane Tutor",
-        role: "tutor",
-        isVerified: true
-      });
-      
-      await storage.createTutorProfile({
-        userId: tutor.id,
-        bio: "Expert Math Tutor",
-        hourlyRate: 1500,
-        subjects: ["Math", "Physics"]
-      });
+    // Additional Admin
+    await storage.createUser({
+      email: "admin@lernentech.com",
+      password,
+      name: "Admin User",
+      role: "admin",
+      isVerified: true
+    });
 
-      // Student
-      await storage.createUser({
-        email: "student@lernentech.com",
-        password,
-        name: "John Student",
-        role: "student",
-        isVerified: true
-      });
-      
-      console.log("Database seeded!");
-    }
+    // Tutors
+    const tutor1 = await storage.createUser({
+      email: "james.mwangi@lernentech.com",
+      password,
+      name: "James Mwangi",
+      role: "tutor",
+      isVerified: true
+    });
+    await storage.createTutorProfile({
+      userId: tutor1.id,
+      bio: "Experienced Mathematics and Physics tutor with 8 years of teaching experience. Specializing in CBC curriculum and KCSE preparation.",
+      hourlyRate: 1500,
+      subjects: ["Mathematics", "Physics", "Science and Technology"]
+    });
+
+    const tutor2 = await storage.createUser({
+      email: "sarah.wanjiru@lernentech.com",
+      password,
+      name: "Sarah Wanjiru",
+      role: "tutor",
+      isVerified: true
+    });
+    await storage.createTutorProfile({
+      userId: tutor2.id,
+      bio: "Certified English and Kiswahili language expert. Cambridge-trained with focus on creative writing and exam techniques.",
+      hourlyRate: 1200,
+      subjects: ["English", "Kiswahili", "Creative Arts"]
+    });
+
+    const tutor3 = await storage.createUser({
+      email: "david.ochieng@lernentech.com",
+      password,
+      name: "David Ochieng",
+      role: "tutor",
+      isVerified: true
+    });
+    await storage.createTutorProfile({
+      userId: tutor3.id,
+      bio: "Software Developer turned educator. Teaching programming, data analysis, and computer science fundamentals.",
+      hourlyRate: 2000,
+      subjects: ["Computer Science", "Web Development", "Programming Fundamentals", "Excel for Analytics"]
+    });
+
+    // Student
+    await storage.createUser({
+      email: "student@lernentech.com",
+      password,
+      name: "John Kamau",
+      role: "student",
+      isVerified: true
+    });
+    
+    console.log("Users seeded!");
+  }
+
+  if (programCount === 0) {
+    console.log("Seeding programs and courses...");
+    
+    // Program 1: Data Analysis Fundamentals
+    const program1 = await storage.createProgram({
+      title: "Data Analysis Fundamentals",
+      description: "Master the essential skills for data analysis. Learn Excel, Power BI, and SQL to transform raw data into actionable insights for business decision-making.",
+      price: 15000,
+      published: true
+    });
+
+    // Course 1 in Program 1
+    const course1 = await storage.createCourse({
+      title: "Excel for Data Analysis",
+      description: "Learn advanced Excel techniques including pivot tables, VLOOKUP, data visualization, and dashboard creation.",
+      price: 5000,
+      programId: program1.id,
+      published: true
+    });
+
+    // Week 1
+    const week1 = await storage.createWeek({ courseId: course1.id, weekNumber: 1, title: "Excel Basics and Navigation" });
+    await storage.createContent({ weekId: week1.id, title: "Introduction to Excel Interface", type: "video", contentUrl: "https://www.youtube.com/watch?v=example1", sequenceOrder: 1 });
+    await storage.createContent({ weekId: week1.id, title: "Basic Formulas and Functions", type: "reading", contentText: "# Basic Formulas\n\nExcel formulas start with an equals sign (=). Common functions include:\n\n- **SUM()** - Adds numbers\n- **AVERAGE()** - Calculates mean\n- **COUNT()** - Counts cells with numbers\n- **IF()** - Conditional logic\n\n## Practice Exercise\nCreate a simple budget tracker using these formulas.", sequenceOrder: 2 });
+    await storage.createContent({ weekId: week1.id, title: "Practice Workbook", type: "file", contentUrl: "/files/week1-practice.xlsx", sequenceOrder: 3 });
+    
+    const quiz1 = await storage.createQuiz({ weekId: week1.id, title: "Week 1 Quiz", passScorePercent: 70, isFinalExam: false });
+    await storage.createQuizQuestion({ quizId: quiz1.id, questionText: "Which symbol starts every Excel formula?", options: ["+", "=", "@", "#"], correctOptionIndex: 1 });
+    await storage.createQuizQuestion({ quizId: quiz1.id, questionText: "What function calculates the average of a range?", options: ["SUM()", "AVERAGE()", "MEAN()", "AVG()"], correctOptionIndex: 1 });
+
+    // Week 2
+    const week2 = await storage.createWeek({ courseId: course1.id, weekNumber: 2, title: "Data Cleaning and Formatting" });
+    await storage.createContent({ weekId: week2.id, title: "Text Functions and Data Cleaning", type: "video", contentUrl: "https://www.youtube.com/watch?v=example2", sequenceOrder: 1 });
+    await storage.createContent({ weekId: week2.id, title: "Conditional Formatting Guide", type: "reading", contentText: "# Conditional Formatting\n\nHighlight cells based on their values to quickly identify trends, outliers, and patterns in your data.", sequenceOrder: 2 });
+    
+    const quiz2 = await storage.createQuiz({ weekId: week2.id, title: "Week 2 Quiz", passScorePercent: 70, isFinalExam: false });
+    await storage.createQuizQuestion({ quizId: quiz2.id, questionText: "Which function removes extra spaces from text?", options: ["CLEAN()", "TRIM()", "REMOVE()", "STRIP()"], correctOptionIndex: 1 });
+
+    // Week 3
+    const week3 = await storage.createWeek({ courseId: course1.id, weekNumber: 3, title: "Pivot Tables and Charts" });
+    await storage.createContent({ weekId: week3.id, title: "Creating Your First Pivot Table", type: "video", contentUrl: "https://www.youtube.com/watch?v=example3", sequenceOrder: 1 });
+    await storage.createContent({ weekId: week3.id, title: "Chart Types and When to Use Them", type: "reading", contentText: "# Choosing the Right Chart\n\n- **Bar/Column**: Comparing categories\n- **Line**: Trends over time\n- **Pie**: Part-to-whole relationships\n- **Scatter**: Correlations between variables", sequenceOrder: 2 });
+    
+    const finalExam1 = await storage.createQuiz({ weekId: week3.id, title: "Final Exam: Excel Mastery", passScorePercent: 75, isFinalExam: true });
+    await storage.createQuizQuestion({ quizId: finalExam1.id, questionText: "Which feature allows you to summarize large datasets?", options: ["Charts", "Pivot Tables", "Filters", "Sorting"], correctOptionIndex: 1 });
+    await storage.createQuizQuestion({ quizId: finalExam1.id, questionText: "What chart type is best for showing trends over time?", options: ["Pie Chart", "Bar Chart", "Line Chart", "Scatter Plot"], correctOptionIndex: 2 });
+
+    // Course 2: Power BI
+    const course2 = await storage.createCourse({
+      title: "Power BI Dashboarding",
+      description: "Create interactive business dashboards with Microsoft Power BI. Learn data modeling, DAX formulas, and visualization best practices.",
+      price: 6000,
+      programId: program1.id,
+      published: true
+    });
+
+    const week4 = await storage.createWeek({ courseId: course2.id, weekNumber: 1, title: "Power BI Introduction" });
+    await storage.createContent({ weekId: week4.id, title: "Getting Started with Power BI", type: "video", contentUrl: "https://www.youtube.com/watch?v=powerbi1", sequenceOrder: 1 });
+    await storage.createQuiz({ weekId: week4.id, title: "Week 1 Assessment", passScorePercent: 70, isFinalExam: false });
+
+    // Standalone Course: Web Development Basics
+    const course3 = await storage.createCourse({
+      title: "Web Development Fundamentals",
+      description: "Start your journey into web development. Learn HTML, CSS, and JavaScript to build responsive, modern websites from scratch.",
+      price: 8000,
+      published: true
+    });
+
+    const webWeek1 = await storage.createWeek({ courseId: course3.id, weekNumber: 1, title: "HTML Foundations" });
+    await storage.createContent({ weekId: webWeek1.id, title: "Understanding HTML Structure", type: "video", contentUrl: "https://www.youtube.com/watch?v=html1", sequenceOrder: 1 });
+    await storage.createContent({ weekId: webWeek1.id, title: "HTML Tags Reference", type: "reading", contentText: "# Essential HTML Tags\n\n## Document Structure\n- `<html>` - Root element\n- `<head>` - Metadata\n- `<body>` - Visible content\n\n## Content Tags\n- `<h1>` to `<h6>` - Headings\n- `<p>` - Paragraphs\n- `<a>` - Links\n- `<img>` - Images", sequenceOrder: 2 });
+    await storage.createQuiz({ weekId: webWeek1.id, title: "HTML Quiz", passScorePercent: 70, isFinalExam: false });
+
+    // Program 2: Professional Skills
+    const program2 = await storage.createProgram({
+      title: "Career Acceleration Program",
+      description: "Boost your professional skills with practical training in CV writing, interview techniques, public speaking, and leadership fundamentals.",
+      price: 12000,
+      published: true
+    });
+
+    const course4 = await storage.createCourse({
+      title: "CV and Interview Mastery",
+      description: "Create a standout CV and ace your interviews. Learn from HR professionals and recruiters about what makes candidates memorable.",
+      price: 4000,
+      programId: program2.id,
+      published: true
+    });
+
+    const cvWeek1 = await storage.createWeek({ courseId: course4.id, weekNumber: 1, title: "Crafting Your CV" });
+    await storage.createContent({ weekId: cvWeek1.id, title: "CV Structure and Format", type: "video", contentUrl: "https://www.youtube.com/watch?v=cv1", sequenceOrder: 1 });
+    await storage.createContent({ weekId: cvWeek1.id, title: "CV Templates", type: "file", contentUrl: "/files/cv-templates.docx", sequenceOrder: 2 });
+    await storage.createQuiz({ weekId: cvWeek1.id, title: "CV Best Practices Quiz", passScorePercent: 70, isFinalExam: false });
+
+    console.log("Programs and courses seeded!");
   }
 
   return httpServer;

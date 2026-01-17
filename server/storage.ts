@@ -44,8 +44,15 @@ export interface IStorage {
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
 
-  // Seeding helper
+  // Seeding helpers
   countUsers(): Promise<number>;
+  countPrograms(): Promise<number>;
+  createProgram(program: { title: string; description: string; price: number; published: boolean }): Promise<Program>;
+  createCourse(course: { title: string; description: string; price: number; programId?: number; published: boolean }): Promise<Course>;
+  createWeek(week: { courseId: number; weekNumber: number; title: string }): Promise<CourseWeek>;
+  createContent(content: { weekId: number; title: string; type: "video" | "reading" | "file" | "link"; contentUrl?: string; contentText?: string; sequenceOrder: number }): Promise<CourseContent>;
+  createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean }): Promise<Quiz>;
+  createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number }): Promise<QuizQuestion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -177,6 +184,41 @@ export class DatabaseStorage implements IStorage {
   async countUsers(): Promise<number> {
     const [count] = await db.select({ count: sql<number>`count(*)` }).from(users);
     return Number(count.count);
+  }
+
+  async countPrograms(): Promise<number> {
+    const [count] = await db.select({ count: sql<number>`count(*)` }).from(programs);
+    return Number(count.count);
+  }
+
+  async createProgram(program: { title: string; description: string; price: number; published: boolean }): Promise<Program> {
+    const [newProgram] = await db.insert(programs).values(program).returning();
+    return newProgram;
+  }
+
+  async createCourse(course: { title: string; description: string; price: number; programId?: number; published: boolean }): Promise<Course> {
+    const [newCourse] = await db.insert(courses).values(course).returning();
+    return newCourse;
+  }
+
+  async createWeek(week: { courseId: number; weekNumber: number; title: string }): Promise<CourseWeek> {
+    const [newWeek] = await db.insert(courseWeeks).values(week).returning();
+    return newWeek;
+  }
+
+  async createContent(content: { weekId: number; title: string; type: "video" | "reading" | "file" | "link"; contentUrl?: string; contentText?: string; sequenceOrder: number }): Promise<CourseContent> {
+    const [newContent] = await db.insert(courseContent).values(content).returning();
+    return newContent;
+  }
+
+  async createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean }): Promise<Quiz> {
+    const [newQuiz] = await db.insert(quizzes).values(quiz).returning();
+    return newQuiz;
+  }
+
+  async createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number }): Promise<QuizQuestion> {
+    const [newQuestion] = await db.insert(quizQuestions).values(question).returning();
+    return newQuestion;
   }
 }
 
