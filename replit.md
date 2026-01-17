@@ -72,3 +72,33 @@ Preferred communication style: Simple, everyday language.
 - **Recharts**: Chart/visualization components
 - **Embla Carousel**: Carousel functionality
 - **react-day-picker**: Calendar/date selection
+
+## Recent Changes (January 2026)
+
+### Course System Implementation
+- **Course Details Page** (`CourseDetails.tsx`): Displays course curriculum with week accordions, content list, and quiz links
+- **Week Gating**: Weeks unlock progressively - Week N requires passing Week N-1 quiz (70% pass rate)
+- **Content Types**: Supports video, reading, file, and link content types with appropriate icons
+- **Quiz Flow** (`Quiz.tsx`): Full quiz taking experience with question display, answer selection, submission, and pass/fail results
+
+### Tutor Marketplace Implementation  
+- **Tutor Profile Page** (`TutorProfile.tsx`): Complete tutor profile with bio, subjects, hourly rate, and reviews
+- **Booking Modal**: Date/time selection for session booking with KES pricing
+- **Booking API**: POST /api/bookings creates sessions with student from session, tutor, time range, and price
+
+### Programs Page
+- **Programs List** (`Programs.tsx`): Displays available learning programs with pricing and enrollment options
+
+### API Endpoints Added
+- `GET /api/courses/:id/progress` - Returns week unlock status based on quiz completion
+- `POST /api/quizzes/:id/submit` - Submit quiz answers and calculate score
+- Booking schema updated to coerce ISO date strings to Date objects
+
+### Test Accounts (password: password123)
+- `student@lernentech.com` - Student role
+- `tutor@lernentech.com` - Tutor role
+- `admin@lernentech.com` - Admin role
+- `esthernjane@gmail.com` - Super admin
+
+### Currency
+All monetary values are in KES (Kenyan Shillings) stored as integers.
