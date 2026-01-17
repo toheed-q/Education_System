@@ -1,18 +1,225 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const userRoleEnum = pgEnum("user_role", ["super_admin", "admin", "student", "tutor"]);
+export const contentTypeEnum = pgEnum("content_type", ["video", "reading", "file", "link"]);
+export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "completed", "cancelled"]);
+export const verificationStatusEnum = pgEnum("verification_status", ["pending", "approved", "rejected"]);
+export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "rejected"]);
+
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(), // Hashed
+  role: userRoleEnum("role").default("student").notNull(),
+  name: text("name").notNull(),
+  isVerified: boolean("is_verified").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const programs = pgTable("programs", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  price: integer("price_kes").notNull(), // KES
+  published: boolean("published").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export const courses = pgTable("courses", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  price: integer("price_kes").notNull(), // KES
+  programId: integer("program_id").references(() => programs.id),
+  published: boolean("published").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const courseWeeks = pgTable("course_weeks", {
+  id: serial("id").primaryKey(),
+  courseId: integer("course_id").notNull().references(() => courses.id),
+  weekNumber: integer("week_number").notNull(),
+  title: text("title").notNull(),
+});
+
+export const courseContent = pgTable("course_content", {
+  id: serial("id").primaryKey(),
+  weekId: integer("week_id").notNull().references(() => courseWeeks.id),
+  title: text("title").notNull(),
+  type: contentTypeEnum("type").notNull(),
+  contentUrl: text("content_url"), // For video, file, link
+  contentText: text("content_text"), // For reading
+  sequenceOrder: integer("sequence_order").notNull(),
+});
+
+export const quizzes = pgTable("quizzes", {
+  id: serial("id").primaryKey(),
+  weekId: integer("week_id").notNull().references(() => courseWeeks.id),
+  title: text("title").notNull(),
+  passScorePercent: integer("pass_score_percent").default(70).notNull(),
+  isFinalExam: boolean("is_final_exam").default(false),
+});
+
+export const quizQuestions = pgTable("quiz_questions", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzes.id),
+  questionText: text("question_text").notNull(),
+  options: jsonb("options").notNull(), // Array of strings
+  correctOptionIndex: integer("correct_option_index").notNull(),
+});
+
+export const quizAttempts = pgTable("quiz_attempts", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzes.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  scorePercent: integer("score_percent").notNull(),
+  passed: boolean("passed").notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+});
+
+export const enrollments = pgTable("enrollments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  courseId: integer("course_id").references(() => courses.id),
+  programId: integer("program_id").references(() => programs.id),
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+  progress: integer("progress").default(0),
+});
+
+export const completedContent = pgTable("completed_content", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  contentId: integer("content_id").notNull().references(() => courseContent.id),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
+export const certificates = pgTable("certificates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  courseId: integer("course_id").references(() => courses.id),
+  programId: integer("program_id").references(() => programs.id),
+  issuedAt: timestamp("issued_at").defaultNow(),
+  code: text("code").notNull().unique(),
+});
+
+export const tutorProfiles = pgTable("tutor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique().references(() => users.id),
+  bio: text("bio").notNull(),
+  hourlyRate: integer("hourly_rate_kes").notNull(),
+  subjects: jsonb("subjects").notNull(), // Array of strings
+  verificationStatus: verificationStatusEnum("verification_status").default("pending"),
+  earnings: integer("earnings_kes").default(0),
+});
+
+export const bookings = pgTable("bookings", {
+  id: serial("id").primaryKey(),
+  studentId: integer("student_id").notNull().references(() => users.id),
+  tutorId: integer("tutor_id").notNull().references(() => users.id), // References USER id of tutor
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  status: bookingStatusEnum("status").default("pending"),
+  pricePaid: integer("price_paid_kes").notNull(),
+  meetingLink: text("meeting_link"),
+});
+
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().references(() => bookings.id),
+  rating: integer("rating").notNull(), // 1-5
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  senderId: integer("sender_id").notNull().references(() => users.id),
+  receiverId: integer("receiver_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  read: boolean("read").default(false),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+export const verificationRequests = pgTable("verification_requests", {
+  id: serial("id").primaryKey(),
+  tutorProfileId: integer("tutor_profile_id").notNull().references(() => tutorProfiles.id),
+  documentUrl: text("document_url").notNull(),
+  status: verificationStatusEnum("status").default("pending"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+});
+
+export const withdrawals = pgTable("withdrawals", {
+  id: serial("id").primaryKey(),
+  tutorId: integer("tutor_id").notNull().references(() => users.id),
+  amount: integer("amount_kes").notNull(),
+  status: withdrawalStatusEnum("status").default("pending"),
+  requestedAt: timestamp("requested_at").defaultNow(),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ one, many }) => ({
+  tutorProfile: one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
+  enrollments: many(enrollments),
+  bookingsAsStudent: many(bookings, { relationName: "studentBookings" }),
+  bookingsAsTutor: many(bookings, { relationName: "tutorBookings" }),
+  sentMessages: many(messages, { relationName: "sentMessages" }),
+  receivedMessages: many(messages, { relationName: "receivedMessages" }),
+}));
+
+export const tutorProfilesRelations = relations(tutorProfiles, ({ one, many }) => ({
+  user: one(users, { fields: [tutorProfiles.userId], references: [users.id] }),
+  verificationRequests: many(verificationRequests),
+}));
+
+export const coursesRelations = relations(courses, ({ one, many }) => ({
+  program: one(programs, { fields: [courses.programId], references: [programs.id] }),
+  weeks: many(courseWeeks),
+  enrollments: many(enrollments),
+}));
+
+export const courseWeeksRelations = relations(courseWeeks, ({ one, many }) => ({
+  course: one(courses, { fields: [courseWeeks.courseId], references: [courses.id] }),
+  content: many(courseContent),
+  quiz: one(quizzes, { fields: [courseWeeks.id], references: [quizzes.weekId] }), // Assuming 1 quiz per week for simplicity, or 1 quiz relation
+}));
+
+export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
+  week: one(courseWeeks, { fields: [quizzes.weekId], references: [courseWeeks.id] }),
+  questions: many(quizQuestions),
+  attempts: many(quizAttempts),
+}));
+
+// Insert Schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, isVerified: true });
+export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, createdAt: true });
+export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true });
+export const insertWeekSchema = createInsertSchema(courseWeeks).omit({ id: true });
+export const insertContentSchema = createInsertSchema(courseContent).omit({ id: true });
+export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true });
+export const insertQuestionSchema = createInsertSchema(quizQuestions).omit({ id: true });
+export const insertTutorProfileSchema = createInsertSchema(tutorProfiles).omit({ id: true, verificationStatus: true, earnings: true });
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, status: true, meetingLink: true });
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, read: true, sentAt: true });
+
+// Types
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Program = typeof programs.$inferSelect;
+export type Course = typeof courses.$inferSelect;
+export type CourseWeek = typeof courseWeeks.$inferSelect;
+export type CourseContent = typeof courseContent.$inferSelect;
+export type Quiz = typeof quizzes.$inferSelect;
+export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type TutorProfile = typeof tutorProfiles.$inferSelect;
+export type Booking = typeof bookings.$inferSelect;
+export type Review = typeof reviews.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+
+// Request/Response Types
+export type LoginRequest = z.infer<typeof insertUserSchema>; // simplified
+export type RegisterRequest = z.infer<typeof insertUserSchema> & { role?: "student" | "tutor" };
+
