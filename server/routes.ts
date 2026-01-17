@@ -159,10 +159,10 @@ export async function registerRoutes(
       const booking = await storage.createBooking({ 
         ...input, 
         studentId: (req.user as any).id,
-        pricePaid: 0 // Should come from program/tutor rate logic
       });
       res.status(201).json(booking);
     } catch (err) {
+      console.error("Booking error:", err);
       res.status(400).json({ message: "Invalid booking" });
     }
   });
@@ -190,6 +190,105 @@ export async function registerRoutes(
       senderId: (req.user as any).id,
     });
     res.status(201).json(message);
+  });
+
+  // Course Progression
+  app.get("/api/courses/:id/progress", async (req, res) => {
+    const courseId = Number(req.params.id);
+    const course = await storage.getCourse(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    
+    const weeks = await storage.getCourseWeeks(courseId);
+    const sortedWeeks = weeks.sort((a, b) => a.weekNumber - b.weekNumber);
+    
+    if (!req.isAuthenticated()) {
+      const progress = sortedWeeks.map((w, i) => ({
+        weekId: w.id,
+        weekNumber: w.weekNumber,
+        unlocked: i === 0,
+        completed: false
+      }));
+      return res.json({ enrolled: false, progress });
+    }
+    
+    const userId = (req.user as any).id;
+    const passedAttempts = await storage.getPassedQuizAttempts(userId);
+    const passedQuizIds = new Set(passedAttempts.map(a => a.quizId));
+    
+    const weeksWithQuizzes = await Promise.all(sortedWeeks.map(async w => {
+      const quiz = await storage.getWeekQuiz(w.id);
+      return { ...w, quiz };
+    }));
+    
+    const progress = weeksWithQuizzes.map((week, index) => {
+      const isFirstWeek = index === 0;
+      const previousWeek = index > 0 ? weeksWithQuizzes[index - 1] : null;
+      const previousQuizPassed = previousWeek?.quiz 
+        ? passedQuizIds.has(previousWeek.quiz.id)
+        : true;
+      
+      return {
+        weekId: week.id,
+        weekNumber: week.weekNumber,
+        unlocked: isFirstWeek || previousQuizPassed,
+        completed: week.quiz ? passedQuizIds.has(week.quiz.id) : false
+      };
+    });
+    
+    res.json({ enrolled: true, progress });
+  });
+
+  // Quizzes
+  app.get("/api/quizzes/:id", async (req, res) => {
+    const quizId = Number(req.params.id);
+    const quiz = await storage.getQuiz(quizId);
+    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+    
+    const questions = await storage.getQuizQuestions(quizId);
+    const questionsWithoutAnswers = questions.map(q => ({
+      id: q.id,
+      questionText: q.questionText,
+      options: q.options as string[],
+    }));
+    
+    res.json({ ...quiz, questions: questionsWithoutAnswers });
+  });
+
+  app.post("/api/quizzes/:id/submit", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    const quizId = Number(req.params.id);
+    const userId = (req.user as any).id;
+    const { answers } = req.body as { answers: Record<number, number> };
+    
+    const quiz = await storage.getQuiz(quizId);
+    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+    
+    const questions = await storage.getQuizQuestions(quizId);
+    
+    let correct = 0;
+    for (const q of questions) {
+      if (answers[q.id] === q.correctOptionIndex) {
+        correct++;
+      }
+    }
+    
+    const scorePercent = Math.round((correct / questions.length) * 100);
+    const passed = scorePercent >= quiz.passScorePercent;
+    
+    await storage.createQuizAttempt({
+      quizId,
+      userId,
+      scorePercent,
+      passed,
+    });
+    
+    res.json({
+      scorePercent,
+      passed,
+      correctAnswers: correct,
+      totalQuestions: questions.length,
+    });
   });
 
   // Seed Data

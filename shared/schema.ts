@@ -200,8 +200,12 @@ export const insertWeekSchema = createInsertSchema(courseWeeks).omit({ id: true 
 export const insertContentSchema = createInsertSchema(courseContent).omit({ id: true });
 export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(quizQuestions).omit({ id: true });
+export const insertQuizAttemptSchema = createInsertSchema(quizAttempts).omit({ id: true, submittedAt: true });
 export const insertTutorProfileSchema = createInsertSchema(tutorProfiles).omit({ id: true, verificationStatus: true, earnings: true });
-export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, status: true, meetingLink: true });
+export const insertBookingSchema = createInsertSchema(bookings, {
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+}).omit({ id: true, studentId: true, status: true, meetingLink: true });
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, read: true, sentAt: true });
 
@@ -214,6 +218,8 @@ export type CourseWeek = typeof courseWeeks.$inferSelect;
 export type CourseContent = typeof courseContent.$inferSelect;
 export type Quiz = typeof quizzes.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type QuizAttempt = typeof quizAttempts.$inferSelect;
+export type InsertQuizAttempt = z.infer<typeof insertQuizAttemptSchema>;
 export type TutorProfile = typeof tutorProfiles.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type Review = typeof reviews.$inferSelect;

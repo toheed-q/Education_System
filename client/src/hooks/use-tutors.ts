@@ -47,6 +47,7 @@ export function useCreateBooking() {
       const res = await fetch(api.bookings.create.path, {
         method: api.bookings.create.method,
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(validated),
       });
       if (!res.ok) throw new Error("Failed to create booking");

@@ -50,3 +50,22 @@ export function useCourse(id: number) {
     enabled: !!id,
   });
 }
+
+interface ProgressItem {
+  weekId: number;
+  weekNumber: number;
+  unlocked: boolean;
+  completed: boolean;
+}
+
+export function useCourseProgress(courseId: number) {
+  return useQuery<{ enrolled: boolean; progress: ProgressItem[] }>({
+    queryKey: ["/api/courses", courseId, "progress"],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/${courseId}/progress`);
+      if (!res.ok) throw new Error("Failed to fetch progress");
+      return res.json();
+    },
+    enabled: !!courseId,
+  });
+}

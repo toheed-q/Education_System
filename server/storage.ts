@@ -4,7 +4,8 @@ import {
   tutorProfiles, bookings, reviews, messages, enrollments, certificates, verificationRequests, withdrawals,
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
-  type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage
+  type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
+  type InsertQuizAttempt
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -43,6 +44,12 @@ export interface IStorage {
   // Messages
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
+
+  // Quizzes
+  getQuiz(id: number): Promise<Quiz | undefined>;
+  getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
+  createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt>;
+  getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -179,6 +186,25 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: InsertMessage): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
+  }
+
+  async getQuiz(id: number): Promise<Quiz | undefined> {
+    const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, id));
+    return quiz;
+  }
+
+  async getQuizQuestions(quizId: number): Promise<QuizQuestion[]> {
+    return await db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId));
+  }
+
+  async createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt> {
+    const [newAttempt] = await db.insert(quizAttempts).values(attempt).returning();
+    return newAttempt;
+  }
+
+  async getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]> {
+    return await db.select().from(quizAttempts)
+      .where(and(eq(quizAttempts.userId, userId), eq(quizAttempts.passed, true)));
   }
 
   async countUsers(): Promise<number> {
