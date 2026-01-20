@@ -96,6 +96,14 @@ Preferred communication style: Simple, everyday language.
 - **Backend Authorization**: `isUserEnrolledInCourse` method checks both direct course enrollment and program enrollment
 - **Enrollment Table**: Supports both individual course and program-wide enrollment
 
+### Role-Specific Dashboards
+- **DashboardLayout** (`DashboardLayout.tsx`): Shared layout with role-based sidebar navigation
+- **StudentDashboard** (`StudentDashboard.tsx`): Enrolled courses, progress tracking, upcoming sessions, messages, certificates
+- **TutorDashboard** (`TutorDashboard.tsx`): Earnings overview with 25% platform fee breakdown, upcoming bookings, verification status, messages
+- **AdminDashboard** (`AdminDashboard.tsx`): User/course/program management, verification requests, platform analytics
+- **Super Admin Controls**: Additional settings, audit logs, and platform configuration (verification fees: KES 500 School, KES 300 Higher Ed)
+- Login redirects: students → /dashboard, tutors → /tutor/dashboard, admins/super_admins → /admin/dashboard
+
 ### API Endpoints Added
 - `GET /api/courses/:id/progress` - Returns week unlock status based on quiz completion
 - `POST /api/quizzes/:id/submit` - Submit quiz answers and calculate score
