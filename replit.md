@@ -87,7 +87,14 @@ Preferred communication style: Simple, everyday language.
 - **Booking API**: POST /api/bookings creates sessions with student from session, tutor, time range, and price
 
 ### Programs Page
-- **Programs List** (`Programs.tsx`): Displays available learning programs with pricing and enrollment options
+- **Programs List** (`Programs.tsx`): Displays available learning programs with exact course counts and enrollment options
+- **Program Details** (`ProgramDetails.tsx`): Shows program information with list of included courses
+
+### Course Access Control
+- **Enrollment-Based Gating**: Course content is restricted to enrolled users only
+- **Preview Mode**: Non-enrolled users see course overview, curriculum structure with week titles, but no detailed content (contentUrl/contentText withheld)
+- **Backend Authorization**: `isUserEnrolledInCourse` method checks both direct course enrollment and program enrollment
+- **Enrollment Table**: Supports both individual course and program-wide enrollment
 
 ### API Endpoints Added
 - `GET /api/courses/:id/progress` - Returns week unlock status based on quiz completion
