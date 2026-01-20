@@ -111,7 +111,26 @@ Preferred communication style: Simple, everyday language.
 ### API Endpoints Added
 - `GET /api/courses/:id/progress` - Returns week unlock status based on quiz completion
 - `POST /api/quizzes/:id/submit` - Submit quiz answers and calculate score
+- `POST /api/enrollments` - Enroll in a course or program (requires authentication)
+- `GET /api/courses/slug/:slug` - Fetch course details by URL slug
+- `GET /api/programs/slug/:slug` - Fetch program details by URL slug
 - Booking schema updated to coerce ISO date strings to Date objects
+
+### URL Slug System (January 2026)
+- **SEO-Friendly URLs**: Courses and programs use slugs instead of numeric IDs
+  - Example: `/courses/web-development-fundamentals` instead of `/courses/3`
+  - Example: `/programs/data-analysis-fundamentals` instead of `/programs/1`
+- **Slug Generation**: `generateSlug()` utility in `shared/utils.ts` converts titles to kebab-case
+- **Database Columns**: `slug` column added to both `courses` and `programs` tables (unique constraint)
+- **Frontend Routing**: Updated to use `:slug` parameter in routes
+- **Hooks**: `useCourseBySlug()` and `useProgramBySlug()` fetch by slug
+
+### Enrollment System (January 2026)
+- **Enrollment API**: POST /api/enrollments with {courseId} or {programId}
+- **Frontend Integration**: "Enroll Now" buttons on course and program detail pages
+- **Authentication Required**: Non-logged-in users redirected to login
+- **Duplicate Prevention**: Server checks for existing enrollments before creating
+- **Cache Invalidation**: React Query cache refreshed after successful enrollment
 
 ### Admin Course/Program Management
 - **Add Course Form** (`AdminCourses.tsx`): Dialog form with title, description, price (KES), optional program selection, and publish toggle

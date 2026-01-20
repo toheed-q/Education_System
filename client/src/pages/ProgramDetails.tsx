@@ -1,14 +1,47 @@
 import { Navigation } from "@/components/Navigation";
-import { useProgram } from "@/hooks/use-content";
-import { useRoute, Link } from "wouter";
+import { useProgramBySlug } from "@/hooks/use-content";
+import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Clock, Award, Users, ArrowRight, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function ProgramDetails() {
-  const [, params] = useRoute("/programs/:id");
-  const programId = parseInt(params?.id || "0");
-  const { data: program, isLoading } = useProgram(programId);
+  const [, params] = useRoute("/programs/:slug");
+  const slug = params?.slug || "";
+  const { data: program, isLoading } = useProgramBySlug(slug);
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const enrollMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/enrollments", { programId: program?.id });
+    },
+    onSuccess: () => {
+      toast({ title: "Successfully enrolled!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/programs/slug", slug] });
+    },
+    onError: (err: any) => {
+      if (err.message === "Already enrolled") {
+        toast({ title: "You are already enrolled in this program" });
+      } else {
+        toast({ title: "Failed to enroll. Please try again.", variant: "destructive" });
+      }
+    },
+  });
+
+  const handleEnroll = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    enrollMutation.mutate();
+  };
 
   if (isLoading) {
     return (
@@ -102,7 +135,7 @@ export default function ProgramDetails() {
                           </div>
                           <p className="text-slate-600 text-sm ml-11">{course.description}</p>
                         </div>
-                        <Link href={`/courses/${course.id}`}>
+                        <Link href={`/courses/${course.slug}`}>
                           <Button variant="outline" size="sm" data-testid={`button-view-course-${course.id}`}>
                             View
                           </Button>
@@ -146,10 +179,23 @@ export default function ProgramDetails() {
                 </p>
               </div>
               
-              <Button className="w-full mb-4" size="lg" data-testid="button-enroll-program">
-                Enroll Now
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+              {program.isEnrolled ? (
+                <Button className="w-full mb-4" size="lg" disabled data-testid="button-enrolled">
+                  Already Enrolled
+                  <CheckCircle className="w-4 h-4 ml-2" />
+                </Button>
+              ) : (
+                <Button 
+                  className="w-full mb-4" 
+                  size="lg" 
+                  data-testid="button-enroll-program"
+                  onClick={handleEnroll}
+                  disabled={enrollMutation.isPending}
+                >
+                  {enrollMutation.isPending ? "Enrolling..." : "Enroll Now"}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              )}
               
               <p className="text-xs text-slate-500 text-center">
                 Get lifetime access to all courses in this program

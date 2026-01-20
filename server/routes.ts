@@ -8,6 +8,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import argon2 from "argon2";
 import { users } from "@shared/schema";
+import { generateSlug } from "@shared/utils";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -126,9 +127,11 @@ export async function registerRoutes(
     }
     try {
       const input = api.programs.create.input.parse(req.body);
+      const slug = generateSlug(input.title);
       const program = await storage.createProgram({
         title: input.title,
         description: input.description,
+        slug,
         price: input.price,
         published: input.published ?? false,
       });
@@ -155,9 +158,11 @@ export async function registerRoutes(
     }
     try {
       const input = api.courses.create.input.parse(req.body);
+      const slug = generateSlug(input.title);
       const course = await storage.createCourse({
         title: input.title,
         description: input.description,
+        slug,
         price: input.price,
         programId: input.programId ?? undefined,
         published: input.published ?? false,
@@ -213,6 +218,97 @@ export async function registerRoutes(
     }));
     
     res.json({ ...course, weeks: weeksWithContent });
+  });
+
+  // Slug-based course lookup
+  app.get("/api/courses/slug/:slug", async (req, res) => {
+    const slug = req.params.slug;
+    const course = await storage.getCourseBySlug(slug);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    
+    const weeks = await storage.getCourseWeeks(course.id);
+    
+    const isAuthenticated = req.isAuthenticated();
+    const userId = isAuthenticated ? (req.user as any).id : null;
+    const isEnrolled = userId ? await storage.isUserEnrolledInCourse(userId, course.id) : false;
+    
+    const weeksWithContent = await Promise.all(weeks.map(async w => {
+      const content = await storage.getWeekContent(w.id);
+      const quiz = await storage.getWeekQuiz(w.id);
+      
+      if (isEnrolled) {
+        return { ...w, content, quiz };
+      } else {
+        return { 
+          ...w, 
+          content: content.map(c => ({ 
+            id: c.id, 
+            title: c.title, 
+            type: c.type, 
+            sequenceOrder: c.sequenceOrder 
+          })),
+          quiz: quiz ? { 
+            id: quiz.id, 
+            title: quiz.title, 
+            passScorePercent: quiz.passScorePercent, 
+            isFinalExam: quiz.isFinalExam 
+          } : undefined
+        };
+      }
+    }));
+    
+    res.json({ ...course, weeks: weeksWithContent, isEnrolled });
+  });
+
+  // Slug-based program lookup
+  app.get("/api/programs/slug/:slug", async (req, res) => {
+    const slug = req.params.slug;
+    const program = await storage.getProgramBySlug(slug);
+    if (!program) return res.status(404).json({ message: "Program not found" });
+    
+    const programCourses = await storage.getCoursesByProgram(program.id);
+    
+    const isAuthenticated = req.isAuthenticated();
+    const userId = isAuthenticated ? (req.user as any).id : null;
+    const isEnrolled = userId ? await storage.getEnrollmentForUser(userId, undefined, program.id) : null;
+    
+    res.json({ ...program, courses: programCourses, isEnrolled: !!isEnrolled });
+  });
+
+  // Enrollments
+  app.post(api.enrollments.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    
+    try {
+      const input = api.enrollments.create.input.parse(req.body);
+      
+      // Check if already enrolled
+      const existingEnrollment = await storage.getEnrollmentForUser(
+        user.id, 
+        input.courseId, 
+        input.programId
+      );
+      
+      if (existingEnrollment) {
+        return res.status(400).json({ message: "Already enrolled" });
+      }
+      
+      const enrollment = await storage.createEnrollment({
+        userId: user.id,
+        courseId: input.courseId,
+        programId: input.programId,
+      });
+      
+      res.status(201).json(enrollment);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to create enrollment" });
+      }
+    }
   });
 
   // Tutors
@@ -850,6 +946,7 @@ export async function registerRoutes(
     const program1 = await storage.createProgram({
       title: "Data Analysis Fundamentals",
       description: "Master the essential skills for data analysis. Learn Excel, Power BI, and SQL to transform raw data into actionable insights for business decision-making.",
+      slug: "data-analysis-fundamentals",
       price: 15000,
       published: true
     });
@@ -858,6 +955,7 @@ export async function registerRoutes(
     const course1 = await storage.createCourse({
       title: "Excel for Data Analysis",
       description: "Learn advanced Excel techniques including pivot tables, VLOOKUP, data visualization, and dashboard creation.",
+      slug: "excel-for-data-analysis",
       price: 5000,
       programId: program1.id,
       published: true
@@ -894,6 +992,7 @@ export async function registerRoutes(
     const course2 = await storage.createCourse({
       title: "Power BI Dashboarding",
       description: "Create interactive business dashboards with Microsoft Power BI. Learn data modeling, DAX formulas, and visualization best practices.",
+      slug: "power-bi-dashboarding",
       price: 6000,
       programId: program1.id,
       published: true
@@ -907,6 +1006,7 @@ export async function registerRoutes(
     const course3 = await storage.createCourse({
       title: "Web Development Fundamentals",
       description: "Start your journey into web development. Learn HTML, CSS, and JavaScript to build responsive, modern websites from scratch.",
+      slug: "web-development-fundamentals",
       price: 8000,
       published: true
     });
@@ -920,6 +1020,7 @@ export async function registerRoutes(
     const program2 = await storage.createProgram({
       title: "Career Acceleration Program",
       description: "Boost your professional skills with practical training in CV writing, interview techniques, public speaking, and leadership fundamentals.",
+      slug: "career-acceleration-program",
       price: 12000,
       published: true
     });
@@ -927,6 +1028,7 @@ export async function registerRoutes(
     const course4 = await storage.createCourse({
       title: "CV and Interview Mastery",
       description: "Create a standout CV and ace your interviews. Learn from HR professionals and recruiters about what makes candidates memorable.",
+      slug: "cv-and-interview-mastery",
       price: 4000,
       programId: program2.id,
       published: true

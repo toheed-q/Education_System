@@ -83,7 +83,7 @@ export default function Programs() {
                         KES {program.price.toLocaleString()}
                       </p>
                     </div>
-                    <Link href={`/programs/${program.id}`}>
+                    <Link href={`/programs/${program.slug}`}>
                       <Button className="group/btn" data-testid={`button-view-program-${program.id}`}>
                         View Program
                         <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />

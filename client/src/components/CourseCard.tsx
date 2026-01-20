@@ -42,7 +42,7 @@ export function CourseCard({ course }: CourseCardProps) {
             <span>8 Weeks</span>
           </div>
           
-          <Link href={`/courses/${course.id}`}>
+          <Link href={`/courses/${course.slug}`}>
             <button className="flex items-center text-blue-600 font-semibold text-sm hover:gap-2 transition-all gap-1">
               View Details <ChevronRight className="w-4 h-4" />
             </button>

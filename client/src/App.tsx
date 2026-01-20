@@ -38,9 +38,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/programs" component={Programs} />
-      <Route path="/programs/:id" component={ProgramDetails} />
+      <Route path="/programs/:slug" component={ProgramDetails} />
       <Route path="/courses" component={Courses} />
-      <Route path="/courses/:id" component={CourseDetails} />
+      <Route path="/courses/:slug" component={CourseDetails} />
       <Route path="/quiz/:id" component={Quiz} />
       <Route path="/tutors" component={Tutors} />
       <Route path="/tutors/:id" component={TutorProfile} />

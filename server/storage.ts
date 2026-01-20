@@ -28,9 +28,11 @@ export interface IStorage {
   getPrograms(): Promise<Program[]>;
   getProgramsWithCourseCounts(): Promise<(Program & { courseCount: number })[]>;
   getProgram(id: number): Promise<Program | undefined>;
+  getProgramBySlug(slug: string): Promise<Program | undefined>;
   getCoursesByProgram(programId: number): Promise<Course[]>;
   getCourses(): Promise<Course[]>;
   getCourse(id: number): Promise<Course | undefined>;
+  getCourseBySlug(slug: string): Promise<Course | undefined>;
   getCourseWeeks(courseId: number): Promise<CourseWeek[]>;
   getWeekContent(weekId: number): Promise<CourseContent[]>;
   getWeekQuiz(weekId: number): Promise<Quiz | undefined>;
@@ -59,6 +61,8 @@ export interface IStorage {
 
   // Enrollments
   isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean>;
+  createEnrollment(data: { userId: number; courseId?: number; programId?: number }): Promise<any>;
+  getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any>;
 
   // Quizzes
   getQuiz(id: number): Promise<Quiz | undefined>;
@@ -77,8 +81,8 @@ export interface IStorage {
   // Seeding helpers
   countUsers(): Promise<number>;
   countPrograms(): Promise<number>;
-  createProgram(program: { title: string; description: string; price: number; published: boolean }): Promise<Program>;
-  createCourse(course: { title: string; description: string; price: number; programId?: number; published: boolean }): Promise<Course>;
+  createProgram(program: { title: string; description: string; slug: string; price: number; published: boolean }): Promise<Program>;
+  createCourse(course: { title: string; description: string; slug: string; price: number; programId?: number; published: boolean }): Promise<Course>;
   createWeek(week: { courseId: number; weekNumber: number; title: string }): Promise<CourseWeek>;
   createContent(content: { weekId: number; title: string; type: "video" | "reading" | "file" | "link"; contentUrl?: string; contentText?: string; sequenceOrder: number }): Promise<CourseContent>;
   createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean }): Promise<Quiz>;
@@ -137,6 +141,11 @@ export class DatabaseStorage implements IStorage {
     return program;
   }
 
+  async getProgramBySlug(slug: string): Promise<Program | undefined> {
+    const [program] = await db.select().from(programs).where(eq(programs.slug, slug));
+    return program;
+  }
+
   async getCoursesByProgram(programId: number): Promise<Course[]> {
     return await db.select().from(courses).where(eq(courses.programId, programId));
   }
@@ -147,6 +156,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCourse(id: number): Promise<Course | undefined> {
     const [course] = await db.select().from(courses).where(eq(courses.id, id));
+    return course;
+  }
+
+  async getCourseBySlug(slug: string): Promise<Course | undefined> {
+    const [course] = await db.select().from(courses).where(eq(courses.slug, slug));
     return course;
   }
 
@@ -301,6 +315,31 @@ export class DatabaseStorage implements IStorage {
     return false;
   }
 
+  async createEnrollment(data: { userId: number; courseId?: number; programId?: number }): Promise<any> {
+    const [enrollment] = await db.insert(enrollments).values({
+      userId: data.userId,
+      courseId: data.courseId,
+      programId: data.programId,
+    }).returning();
+    return enrollment;
+  }
+
+  async getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any> {
+    if (courseId) {
+      const [enrollment] = await db.select()
+        .from(enrollments)
+        .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
+      return enrollment;
+    }
+    if (programId) {
+      const [enrollment] = await db.select()
+        .from(enrollments)
+        .where(and(eq(enrollments.userId, userId), eq(enrollments.programId, programId)));
+      return enrollment;
+    }
+    return null;
+  }
+
   async getQuiz(id: number): Promise<Quiz | undefined> {
     const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, id));
     return quiz;
@@ -376,12 +415,12 @@ export class DatabaseStorage implements IStorage {
     return Number(count.count);
   }
 
-  async createProgram(program: { title: string; description: string; price: number; published: boolean }): Promise<Program> {
+  async createProgram(program: { title: string; description: string; slug: string; price: number; published: boolean }): Promise<Program> {
     const [newProgram] = await db.insert(programs).values(program).returning();
     return newProgram;
   }
 
-  async createCourse(course: { title: string; description: string; price: number; programId?: number; published: boolean }): Promise<Course> {
+  async createCourse(course: { title: string; description: string; slug: string; price: number; programId?: number; published: boolean }): Promise<Course> {
     const [newCourse] = await db.insert(courses).values(course).returning();
     return newCourse;
   }

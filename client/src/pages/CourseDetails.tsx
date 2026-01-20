@@ -1,12 +1,15 @@
 import { Navigation } from "@/components/Navigation";
-import { useCourse, useCourseProgress } from "@/hooks/use-content";
-import { useRoute, Link } from "wouter";
+import { useCourseBySlug, useCourseProgress } from "@/hooks/use-content";
+import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Clock, BookOpen, CheckCircle, Lock, PlayCircle, FileText, Video, LinkIcon, ChevronDown, ChevronUp, Award } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface ContentItem {
   id: number;
@@ -219,14 +222,44 @@ function WeekAccordion({
 }
 
 export default function CourseDetails() {
-  const [, params] = useRoute("/courses/:id");
-  const courseId = parseInt(params?.id || "0");
-  const { data: course, isLoading } = useCourse(courseId);
+  const [, params] = useRoute("/courses/:slug");
+  const slug = params?.slug || "";
+  const { data: course, isLoading } = useCourseBySlug(slug);
+  const courseId = course?.id || 0;
   const { data: progressData } = useCourseProgress(courseId);
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
+
+  const enrollMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/enrollments", { courseId });
+    },
+    onSuccess: () => {
+      toast({ title: "Successfully enrolled!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/courses/slug", slug] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courses", courseId, "progress"] });
+    },
+    onError: (err: any) => {
+      if (err.message === "Already enrolled") {
+        toast({ title: "You are already enrolled in this course" });
+      } else {
+        toast({ title: "Failed to enroll. Please try again.", variant: "destructive" });
+      }
+    },
+  });
+
+  const handleEnroll = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    enrollMutation.mutate();
+  };
 
   const weekUnlockStatus = useMemo(() => {
     const status: Record<number, { unlocked: boolean; completed: boolean }> = {};
@@ -296,8 +329,10 @@ export default function CourseDetails() {
                   size="lg" 
                   className="w-full sm:w-auto bg-primary hover:bg-primary/90 h-14 px-8 text-lg rounded-full"
                   data-testid="button-enroll"
+                  onClick={handleEnroll}
+                  disabled={enrollMutation.isPending}
                 >
-                  Enroll Now - KES {course.price.toLocaleString()}
+                  {enrollMutation.isPending ? "Enrolling..." : `Enroll Now - KES ${course.price.toLocaleString()}`}
                 </Button>
                 <span className="text-slate-400 text-sm">
                   30-day money-back guarantee

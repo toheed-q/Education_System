@@ -26,6 +26,18 @@ export function useProgram(id: number) {
   });
 }
 
+export function useProgramBySlug(slug: string) {
+  return useQuery<any>({
+    queryKey: ["/api/programs/slug", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/programs/slug/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch program");
+      return res.json();
+    },
+    enabled: !!slug,
+  });
+}
+
 // Courses
 export function useCourses() {
   return useQuery({
@@ -48,6 +60,18 @@ export function useCourse(id: number) {
       return api.courses.get.responses[200].parse(await res.json());
     },
     enabled: !!id,
+  });
+}
+
+export function useCourseBySlug(slug: string) {
+  return useQuery<any>({
+    queryKey: ["/api/courses/slug", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/slug/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch course");
+      return res.json();
+    },
+    enabled: !!slug,
   });
 }
 

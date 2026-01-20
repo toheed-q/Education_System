@@ -25,6 +25,7 @@ export const programs = pgTable("programs", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull(),
+  slug: text("slug").notNull().unique(),
   price: integer("price_kes").notNull(), // KES
   published: boolean("published").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -34,6 +35,7 @@ export const courses = pgTable("courses", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull(),
+  slug: text("slug").notNull().unique(),
   price: integer("price_kes").notNull(), // KES
   programId: integer("program_id").references(() => programs.id),
   published: boolean("published").default(false),

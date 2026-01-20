@@ -191,6 +191,23 @@ export const api = {
       },
     },
   },
+  enrollments: {
+    create: {
+      method: 'POST' as const,
+      path: '/api/enrollments',
+      input: z.object({
+        courseId: z.number().optional(),
+        programId: z.number().optional(),
+      }).refine(data => data.courseId || data.programId, {
+        message: "Either courseId or programId is required",
+      }),
+      responses: {
+        201: z.custom<typeof enrollments.$inferSelect>(),
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {
