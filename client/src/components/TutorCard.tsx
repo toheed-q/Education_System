@@ -1,6 +1,6 @@
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { type TutorProfile, type User } from "@shared/schema";
-import { Star, MapPin, BadgeCheck } from "lucide-react";
+import { Star, BadgeCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
@@ -9,16 +9,24 @@ interface TutorCardProps {
 }
 
 export function TutorCard({ tutor }: TutorCardProps) {
+  const [, navigate] = useLocation();
+  
   // Parse subjects safely since it's JSONB
   const subjects = Array.isArray(tutor.subjects) 
     ? tutor.subjects 
     : JSON.parse(tutor.subjects as unknown as string || "[]");
 
+  const handleCardClick = () => {
+    navigate(`/tutors/${tutor.id}`);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all duration-300"
+      onClick={handleCardClick}
+      className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer"
+      data-testid={`card-tutor-${tutor.id}`}
     >
       <div className="flex items-start gap-4">
         <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-2xl font-bold text-slate-400">
@@ -66,11 +74,13 @@ export function TutorCard({ tutor }: TutorCardProps) {
           <span className="text-lg font-bold text-slate-900">KES {tutor.hourlyRate}</span>
           <span className="text-xs text-slate-500">/hour</span>
         </div>
-        <Link href={`/tutors/${tutor.id}`}>
-          <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white rounded-full px-5">
-            Book Now
-          </Button>
-        </Link>
+        <Button 
+          size="sm" 
+          className="bg-orange-500 hover:bg-orange-600 text-white rounded-full px-5"
+          data-testid={`button-book-tutor-${tutor.id}`}
+        >
+          Book Now
+        </Button>
       </div>
     </motion.div>
   );
