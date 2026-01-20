@@ -295,6 +295,44 @@ export class DatabaseStorage implements IStorage {
     return newMessage;
   }
 
+  async getConversations(userId: number): Promise<any[]> {
+    // Get unique users who have exchanged messages with this user
+    const result = await db.execute(sql`
+      SELECT DISTINCT 
+        CASE WHEN sender_id = ${userId} THEN receiver_id ELSE sender_id END as partner_id
+      FROM messages 
+      WHERE sender_id = ${userId} OR receiver_id = ${userId}
+    `);
+    
+    const partnerIds = result.rows.map((r: any) => r.partner_id);
+    if (partnerIds.length === 0) return [];
+    
+    // Get user details for each partner
+    const partners = await Promise.all(partnerIds.map(async (partnerId: number) => {
+      const [partner] = await db.select().from(users).where(eq(users.id, partnerId));
+      
+      // Get the last message in the conversation
+      const [lastMessage] = await db.select().from(messages).where(
+        sql`(sender_id = ${userId} AND receiver_id = ${partnerId}) OR (sender_id = ${partnerId} AND receiver_id = ${userId})`
+      ).orderBy(sql`sent_at DESC`).limit(1);
+      
+      // Count unread messages
+      const unreadResult = await db.execute(sql`
+        SELECT COUNT(*) as count FROM messages 
+        WHERE sender_id = ${partnerId} AND receiver_id = ${userId} AND read = false
+      `);
+      const unreadCount = Number(unreadResult.rows[0]?.count || 0);
+      
+      return {
+        user: partner,
+        lastMessage,
+        unreadCount
+      };
+    }));
+    
+    return partners;
+  }
+
   async isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean> {
     // Check direct course enrollment
     const [directEnrollment] = await db.select()

@@ -742,6 +742,13 @@ export async function registerRoutes(
     res.status(201).json(message);
   });
 
+  // Get conversations (list of users with messages)
+  app.get("/api/conversations", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const conversations = await storage.getConversations((req.user as any).id);
+    res.json(conversations);
+  });
+
   // Course Progression
   app.get("/api/courses/:id/progress", async (req, res) => {
     const courseId = Number(req.params.id);
