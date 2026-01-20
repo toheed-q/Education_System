@@ -43,9 +43,18 @@ export function Navigation() {
     { href: "/tutor/requests", label: "Requests", icon: Users },
   ];
 
-  const navLinks = user 
-    ? (user.role === 'tutor' ? tutorLinks : studentLinks)
-    : links;
+  const adminLinks = [
+    { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  ];
+
+  const getNavLinks = () => {
+    if (!user) return links;
+    if (user.role === 'admin' || user.role === 'super_admin') return adminLinks;
+    if (user.role === 'tutor') return tutorLinks;
+    return studentLinks;
+  };
+
+  const navLinks = getNavLinks();
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-md border-b border-gray-100">
