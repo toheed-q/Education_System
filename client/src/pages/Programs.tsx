@@ -64,7 +64,7 @@ export default function Programs() {
                   <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-slate-500">
                     <span className="flex items-center gap-1">
                       <BookOpen className="w-4 h-4" />
-                      Multiple courses
+                      {(program as any).courseCount || 0} {(program as any).courseCount === 1 ? 'course' : 'courses'}
                     </span>
                     <span className="flex items-center gap-1">
                       <Users className="w-4 h-4" />

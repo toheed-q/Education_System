@@ -107,15 +107,15 @@ export async function registerRoutes(
 
   // Programs & Courses
   app.get(api.programs.list.path, async (req, res) => {
-    const programs = await storage.getPrograms();
+    const programs = await storage.getProgramsWithCourseCounts();
     res.json(programs);
   });
 
   app.get(api.programs.get.path, async (req, res) => {
     const program = await storage.getProgram(Number(req.params.id));
     if (!program) return res.status(404).json({ message: "Program not found" });
-    // TODO: fetch courses for program
-    res.json({ ...program, courses: [] }); 
+    const programCourses = await storage.getCoursesByProgram(program.id);
+    res.json({ ...program, courses: programCourses }); 
   });
 
   app.get(api.courses.list.path, async (req, res) => {

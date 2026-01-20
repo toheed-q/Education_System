@@ -25,7 +25,9 @@ export interface IStorage {
 
   // Programs & Courses
   getPrograms(): Promise<Program[]>;
+  getProgramsWithCourseCounts(): Promise<(Program & { courseCount: number })[]>;
   getProgram(id: number): Promise<Program | undefined>;
+  getCoursesByProgram(programId: number): Promise<Course[]>;
   getCourses(): Promise<Course[]>;
   getCourse(id: number): Promise<Course | undefined>;
   getCourseWeeks(courseId: number): Promise<CourseWeek[]>;
@@ -99,9 +101,23 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(programs);
   }
 
+  async getProgramsWithCourseCounts(): Promise<(Program & { courseCount: number })[]> {
+    const allPrograms = await db.select().from(programs);
+    const allCourses = await db.select().from(courses);
+    
+    return allPrograms.map(program => ({
+      ...program,
+      courseCount: allCourses.filter(c => c.programId === program.id).length
+    }));
+  }
+
   async getProgram(id: number): Promise<Program | undefined> {
     const [program] = await db.select().from(programs).where(eq(programs.id, id));
     return program;
+  }
+
+  async getCoursesByProgram(programId: number): Promise<Course[]> {
+    return await db.select().from(courses).where(eq(courses.programId, programId));
   }
 
   async getCourses(): Promise<Course[]> {

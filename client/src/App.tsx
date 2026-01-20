@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Programs from "@/pages/Programs";
+import ProgramDetails from "@/pages/ProgramDetails";
 import Courses from "@/pages/Courses";
 import CourseDetails from "@/pages/CourseDetails";
 import Quiz from "@/pages/Quiz";
@@ -19,6 +20,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/programs" component={Programs} />
+      <Route path="/programs/:id" component={ProgramDetails} />
       <Route path="/courses" component={Courses} />
       <Route path="/courses/:id" component={CourseDetails} />
       <Route path="/quiz/:id" component={Quiz} />
