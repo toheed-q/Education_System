@@ -1,0 +1,1177 @@
+Tutor and Student System Spec
+
+This section defines the super categories, dashboards, and registration journeys explicitly. Build exactly as described. Do not infer missing steps. Do not replace with “etc.”
+
+1) Super categories explained explicitly
+1.1 Why super categories exist
+
+Super categories exist to:
+
+Prevent tutors from appearing in school child categories without verification
+
+Make it impossible to bypass child safety rules by choosing unrelated subjects
+
+Ensure search filters map a parent’s selection (for example Grade 4) to the correct tutor pool
+
+Allow verification and visibility decisions per super category
+
+Each tutor may select one or more super categories. Each super category has its own subject list and its own verification status. The system must treat each super category as a separate compliance scope.
+
+1.2 The three super categories (fixed list)
+
+Super Category A: School Tutoring
+
+Includes all tutoring for learners in:
+
+Pre-Primary (PP1, PP2)
+
+Lower Primary (Grade 1–3)
+
+Upper Primary (Grade 4–6)
+
+Junior Secondary (Grade 7–9)
+
+Senior Secondary (Grade 10–12)
+
+This category involves minors. It is high-risk. It requires strict verification before tutors can appear publicly in this category.
+
+Verification rules for School Tutoring
+
+Tutor must pay KES 500 one-time verification fee.
+
+Tutor must submit required documents:
+
+National ID
+
+TSC certificate and or TSC number
+
+Admin must approve School Tutoring verification before the tutor is visible for School Tutoring search results or bookings.
+
+Super Category B: Higher Education
+
+Includes tutoring for post-secondary learners:
+
+Certificate
+
+Diploma
+
+Undergraduate
+
+Postgraduate
+
+This category does not require TSC. Verification is optional but supported to increase trust.
+
+Verification rules for Higher Education
+
+Tutor pays KES 300 one-time verification fee, which covers both Higher Education and Professional Skills as a combined verification fee.
+
+Required documents for approval:
+
+National ID
+
+Degree or professional certificate
+
+Admin approves verification for Higher Education separately.
+
+Super Category C: Professional Skills
+
+Includes workplace skills tutoring and mentorship:
+
+Business mentoring
+
+Career coaching
+
+Product management coaching
+
+Professional writing
+
+Public speaking
+
+Data analytics coaching
+
+Verification is optional but supported to increase trust.
+
+Verification rules for Professional Skills
+
+Tutor pays KES 300 one-time combined verification fee (covers Higher Education and Professional Skills together).
+
+Required documents for approval:
+
+National ID
+
+Professional certificate or credible proof
+
+Admin approves verification for Professional Skills separately.
+
+1.3 Fee rule summary (must implement)
+
+If tutor selects School Tutoring in any way:
+
+They must pay KES 500 to be eligible for School Tutoring verification.
+
+If tutor selects only Higher Education and or Professional Skills:
+
+They must pay KES 300 for verification eligibility.
+
+Payment is one-time per tutor per fee type. It is not per subject.
+
+Admin verification is per super category, regardless of fee.
+
+The system must store:
+
+what fee was paid (KES 500 or KES 300)
+
+what categories were paid for eligibility
+
+what categories were actually approved
+
+1.4 Visibility rules tied to super categories
+
+Visibility is not one global switch. Visibility is per category.
+
+Example
+
+Tutor selects School Tutoring and Professional Skills.
+
+Tutor has not been verified for School Tutoring yet.
+
+Tutor may be visible in Professional Skills listings but must be hidden from School Tutoring listings until approved.
+
+On the tutor profile page shown to students/parents
+
+Show the three super categories with status badges:
+
+Approved: check mark and “Verified”
+
+Pending: “Verification in progress”
+
+Not verified: “Not verified”
+
+If School Tutoring is not verified, show a clear statement:
+
+“This tutor is not verified for School Tutoring and cannot be booked for school learners.”
+
+2) Dashboards: explicit feature lists by user type
+2.1 Tutor dashboard: required modules and functions
+
+Tutor dashboard is the control panel for the tutor’s account and tutoring operations. It must include these left nav modules:
+
+A. Dashboard Home
+
+Summary cards:
+
+Upcoming sessions count
+
+Completed sessions count
+
+Earnings summary:
+
+Gross earnings (KES)
+
+Platform service fee total (KES)
+
+Net earnings (KES)
+
+Net available for withdrawal (KES)
+
+Verification status summary:
+
+School Tutoring status
+
+Higher Education status
+
+Professional Skills status
+
+Profile completion percentage with a checklist of missing items
+
+B. Profile
+
+Edit profile photo
+
+Edit bio
+
+Edit location (required if offers in-person)
+
+Toggle offers online
+
+Toggle offers in-person
+
+Set hourly rate (KES)
+
+Select super categories
+
+Select subjects per selected category
+
+View profile completion percent
+
+“Preview my public profile” (what students see)
+
+C. Availability
+
+Weekly availability grid editor
+
+Day of week
+
+Start time
+
+End time
+
+Block out dates feature (optional for V1 but preferred)
+
+Display: “Booked sessions block availability automatically”
+
+D. Bookings and Sessions
+
+Tabs:
+
+Upcoming (BOOKED)
+
+Completed (COMPLETED)
+
+Canceled (CANCELED)
+
+Disputed (DISPUTED)
+
+Each booking row must show:
+
+student display name (no email or phone)
+
+subject
+
+date and time
+
+duration hours
+
+amount gross (KES)
+
+platform fee (KES)
+
+net (KES)
+
+status
+
+actions:
+
+View details
+
+Open chat (only if paid booking)
+
+Session details view:
+
+calendar invite link or .ics status
+
+session notes area for tutor (private)
+
+E. Messages
+
+List of conversations (only for paid bookings)
+
+Conversation view with:
+
+persistent compliance banner
+
+block and redact behavior is server-driven
+
+Tutor can report a student to admin
+
+Tutor can request admin help (creates a ticket)
+
+F. Verification
+
+Show status by super category:
+
+Not verified
+
+Awaiting payment
+
+In review
+
+Approved
+
+Needs resubmission
+
+Rejected
+
+Upload docs section:
+
+National ID upload
+
+TSC upload or input TSC number (for School Tutoring)
+
+Degree or professional certificate upload
+
+“Submit for verification” button triggers fee logic:
+
+If School Tutoring selected → pay KES 500
+
+Else if Higher Education or Professional Skills selected → pay KES 300
+
+Payment must be confirmed before request becomes visible to admin
+
+If Needs resubmission:
+
+show admin reason
+
+show which docs to re-upload
+
+allow resubmission without new payment
+
+G. Earnings and Payouts
+
+Earnings summary charts (basic)
+
+Payout history table:
+
+date
+
+amount net
+
+status
+
+reference
+
+Withdraw funds flow:
+
+input amount up to net available
+
+submit withdrawal request
+
+show status: requested, approved, paid
+
+Explanation of platform fee:
+
+“Platform service fee: 25%”
+
+H. Account and Settings
+
+Change password
+
+Update email (requires OTP verification)
+
+Update phone (requires OTP)
+
+Notification preferences (email for V1)
+
+Policy acceptance view (which policies accepted and versions)
+
+I. Help and Support
+
+FAQ
+
+Contact support
+
+Report issue form
+
+Tutor dashboard enforcement rules
+
+Tutor cannot be visible publicly unless profile completion is 100%.
+
+Tutor cannot appear in School Tutoring listings unless School Tutoring verification is approved.
+
+Tutor cannot message any student unless there is a paid booking.
+
+Tutor cannot withdraw funds unless policy accepted.
+
+2.2 Student or parent dashboard: required modules and functions
+
+Student dashboard must support both:
+
+adults booking for themselves
+
+parents booking for kids
+
+Do not require a separate “parent” role. Store relationship context inside booking.
+
+Left nav modules:
+
+A. Dashboard Home
+
+Summary cards:
+
+Active courses count
+
+Completed courses count
+
+Upcoming tutoring sessions count
+
+Certificates available count
+
+Notifications list preview
+
+B. My Learning
+
+Enrolled courses list
+
+progress bar per course
+
+current week shown
+
+resume button
+
+Enrolled programs list
+
+overall program progress
+
+Course player
+
+week list with lock states
+
+content items with checkmarks
+
+quiz entry points and score history
+
+final exam entry
+
+Gating explanation visible when locked:
+
+“Complete Week 1 and pass quiz to unlock Week 2.”
+
+C. My Certificates
+
+Course certificates list
+
+Program certificates list
+
+Download button
+
+Verification link
+
+LinkedIn instructions page link
+
+D. Find Tutors
+
+Search tutors by:
+
+Super category
+
+For School Tutoring:
+
+level and grade mapping (PP1-PP2, Grade 1-12)
+
+subject
+
+For Higher Education:
+
+level (certificate/diploma/undergrad/postgrad)
+
+subject
+
+For Professional Skills:
+
+subject
+
+Online only toggle
+
+In-person location filter
+
+Min rating filter
+
+Tutor cards show:
+
+name
+
+subjects
+
+hourly rate
+
+rating
+
+“Verified” badges by super category
+
+marketed sessions completed number (separate from real)
+
+E. Bookings and Sessions
+
+Tabs:
+
+Upcoming
+
+Completed
+
+Canceled
+
+Disputed
+
+Booking details show:
+
+tutor name
+
+subject
+
+date and time
+
+duration
+
+status
+
+payment reference
+
+calendar invite status
+
+open chat button for BOOKED only
+
+F. Messages
+
+Conversations list (only paid bookings)
+
+Chat window with compliance banner
+
+Report tutor to admin
+
+Safety tips link
+
+G. Payments and Purchases
+
+Purchase history:
+
+courses
+
+programs
+
+tutor sessions
+
+verification fees if user is tutor too
+
+Status and receipts
+
+H. Account and Settings
+
+Profile info
+
+Update email and phone with OTP verification
+
+Change password
+
+Policy acceptance status
+
+I. Help and Support
+
+FAQ
+
+Contact support
+
+Report issue form
+
+Student dashboard enforcement rules
+
+Student cannot access paid course content until payment confirmed.
+
+Student cannot chat with tutor until booking is paid and confirmed.
+
+Student cannot rate until session is completed.
+
+Student must accept policies before accessing booking details and messaging.
+
+2.3 Admin dashboard: required modules and functions
+
+Admin dashboard must be comprehensive and is web-only.
+
+Left nav modules:
+
+Overview
+
+Real metrics:
+
+total revenue KES by type
+
+real enrollments
+
+real completed sessions
+
+pending verifications count
+
+pending payouts count
+
+Marketing counters (separate display):
+
+marketed enrollments
+
+marketed sessions
+
+Alerts:
+
+flagged messages pending review
+
+suspicious login attempts summary
+
+payment failures spikes
+
+Programs
+
+Create, edit, publish, unpublish programs
+
+Program-courses ordering editor
+
+Program pricing
+
+Program certificate settings
+
+Courses
+
+Create, edit, publish, unpublish courses
+
+Week builder:
+
+add, reorder, rename weeks
+
+Content item uploader:
+
+video link
+
+reading markdown
+
+file upload to storage
+
+Quiz builder:
+
+create quiz per week
+
+set pass score
+
+question types: MCQ, true/false, short answer (graded rules)
+
+Final exam builder
+
+Users
+
+Search and view users by:
+
+email
+
+phone
+
+name
+
+role
+
+View user details:
+
+purchases
+
+enrollments
+
+certificates
+
+bookings
+
+messages flags count
+
+Role management:
+
+Super Admin can create admins
+
+Admin cannot create Super Admin
+
+Tutor Management
+
+View all tutors and profile completion
+
+View tutor profile details
+
+Toggle tutor visibility override (with audit log)
+
+Deactivate tutor (with reason)
+
+View tutor category selections and verification statuses
+
+Verification Requests
+
+Queue view filters:
+
+School Tutoring
+
+Higher Education
+
+Professional Skills
+
+Status (in review, needs resubmission, rejected)
+
+Request details:
+
+documents view via signed URLs
+
+payment reference and amount
+
+tutor profile context
+
+Actions per category:
+
+Approve
+
+Needs resubmission (must require reason)
+
+Reject (must require reason)
+
+Email notifications automatically triggered
+
+SLA tracking:
+
+show “days since submitted”
+
+Bookings
+
+Full booking table with filters:
+
+tutor
+
+student
+
+date range
+
+status
+
+amount
+
+Booking detail page:
+
+payment reference and status
+
+calendar invite status
+
+dispute markers
+
+Admin actions:
+
+cancel booking
+
+mark completed
+
+open dispute
+
+resolve dispute with notes
+
+Payments
+
+Purchases list
+
+Purchase types:
+
+course
+
+program
+
+tutor session
+
+tutor verification fee
+
+Paystack reference
+
+Status
+
+Webhook logs for each reference
+
+Manual reconcile tool:
+
+verify transaction by reference and update status with audit log only if mismatch proven
+
+Payouts
+
+Withdrawal requests queue
+
+Bulk approve tool
+
+Payout ledger history
+
+Export to CSV
+
+Show platform fee and net payout values
+
+Admin actions:
+
+approve
+
+mark as paid
+
+reject with reason
+
+Messaging Compliance
+
+Flagged messages list
+
+View conversation context
+
+Matched pattern view:
+
+phone match
+
+email match
+
+URL match
+
+keyword match
+
+Actions:
+
+clear flag
+
+warn tutor or student
+
+lock conversation
+
+deactivate tutor
+
+suspend student
+
+Automated enforcement thresholds:
+
+if a tutor triggers 3 high-confidence blocks within 30 days, auto-suspend tutor and escalate to admin review
+
+Email Broadcasts
+
+Create broadcast campaign
+
+Segments:
+
+all students
+
+all tutors
+
+all users
+
+Preview email
+
+Send
+
+Store campaign logs:
+
+recipients count
+
+delivery statuses
+
+Knowledge Base
+
+Manage FAQ articles:
+
+create, edit, publish
+
+FAQ query logs
+
+Requested courses list:
+
+topic
+
+count
+
+timestamps
+
+optional email
+
+Content Pages
+
+About page editor
+
+Terms editor
+
+Privacy policy editor
+
+Child safety policy editor
+
+Operating since 2021 must be present
+
+Audit Logs
+
+Search audit logs
+
+Filter by:
+
+actor
+
+action type
+
+target
+
+date range
+
+Export audit logs
+
+Feature Flags
+
+Toggle flags
+
+Staged rollouts
+
+Marketing Counters (Super Admin only)
+
+Edit marketed enrollment and sessions numbers safely
+
+Ensure these counters never affect real metrics
+
+Admin enforcement rules
+
+No verification request appears until payment confirmed.
+
+All actions create audit logs.
+
+Deactivation immediately removes tutor visibility and booking ability.
+
+3) Tutor registration journey (all angles, fully explicit)
+3.1 Tutor onboarding stages
+
+Tutor onboarding must have clear stages:
+
+Stage 1: Account creation
+
+Tutor enters:
+
+full name
+
+email
+
+phone number
+
+password
+
+System sends OTP to email
+
+Tutor enters OTP
+
+Account becomes active
+
+Role is set to TUTOR
+
+Stage 2: Profile setup wizard
+Wizard pages:
+
+Profile photo upload (required)
+
+Bio (required)
+
+Choose super categories (choose 1 to 3)
+
+Choose subjects under each selected super category (required)
+
+Set hourly rate (KES) (required)
+
+Choose online and or in-person offering
+
+If in-person selected:
+
+location required
+
+Set availability schedule (required)
+
+Review and submit profile
+
+Profile completion percent
+
+Must compute strictly from required fields
+
+Profile becomes eligible to list only at 100%
+
+Stage 3: Verification setup
+
+Tutor sees verification panel for each selected super category
+
+Each category shows:
+
+status
+
+required docs
+
+required fee for eligibility
+
+Verification fee logic screens
+
+If School Tutoring selected:
+
+show “School Tutoring verification fee: KES 500 one-time”
+
+If only Higher Education and or Professional Skills selected:
+
+show “Verification fee: KES 300 one-time (covers Higher Education and Professional Skills)”
+
+Stage 4: Document upload
+
+Tutor uploads docs based on selected categories
+
+Docs stored privately and accessible only via signed URLs
+
+Stage 5: Pay and submit for verification
+
+Tutor clicks “Submit for verification”
+
+System checks:
+
+profile completion must be 100
+
+required docs present for the selected category
+
+If checks pass:
+
+system sets status to AWAITING_PAYMENT
+
+initiates Paystack payment
+
+Only after webhook confirms:
+
+status becomes IN_REVIEW
+
+admin can see request
+
+Stage 6: Admin review
+
+Admin approves or returns for resubmission or rejects per category
+
+Tutor sees reason if returned or rejected
+
+Tutor receives email updates
+
+Stage 7: Listing rules
+
+Tutor becomes visible:
+
+in categories that are either:
+
+verified approved, or
+
+do not require verification
+
+Tutor can be visible in Professional Skills while School Tutoring remains pending
+
+3.2 Tutor registration edge cases
+
+Tutor registers but never completes profile:
+
+keep account but set is_visible false
+
+Tutor completes profile but never pays verification:
+
+visible only in non-verified categories
+
+Tutor selects School Tutoring later after being active in Professional Skills:
+
+immediately hide them from School Tutoring listings until School Tutoring verification approved
+
+Tutor resubmits docs:
+
+no new payment required
+
+Tutor changes phone or email:
+
+must re-verify OTP
+
+4) Student and parent registration journey (all angles, fully explicit)
+
+Students can arrive via:
+
+browsing courses
+
+browsing tutors
+
+booking session without login
+
+enrolling in course without login
+
+4.1 Student account creation flows
+
+Flow A: Standard signup
+
+full name
+
+email
+
+phone
+
+password
+
+email OTP verification
+
+role set to STUDENT
+
+Flow B: OAuth signup
+
+Google or Facebook
+
+Must still collect phone number after OAuth login
+
+Must verify phone uniqueness
+
+4.2 Course enrollment journey from all angles
+
+Case 1: Logged-in student
+
+student clicks Enroll
+
+system calls backend payment init for COURSE
+
+Paystack payment completes
+
+backend webhook confirms and fulfills
+
+student sees:
+
+“Payment confirmed”
+
+course unlocked week 1
+
+Case 2: Logged-out visitor
+
+visitor clicks Enroll
+
+collect:
+
+full name
+
+email
+
+phone
+
+payment init and Paystack payment
+
+backend confirms via webhook
+
+create or link account:
+
+if email already exists, prompt login
+
+if phone already exists with different email, show error and ask to contact support
+
+after account link:
+
+show “Set password” screen or offer Google login
+
+then redirect to course dashboard
+
+4.3 Tutor booking journey from all angles
+
+Case 1: Logged-in student
+
+select tutor, slot, duration
+
+create booking PENDING_PAYMENT
+
+init payment
+
+webhook confirms
+
+booking becomes BOOKED
+
+show chat and session details
+
+Case 2: Logged-out visitor
+
+select tutor, slot, duration
+
+collect:
+
+full name
+
+email
+
+phone
+
+confirm policy acceptance checkbox
+
+init payment
+
+webhook confirms
+
+create or link student account
+
+redirect to sessions dashboard
+
+enable chat
+
+Policy acceptance enforcement
+
+student must accept Student/Parent policy before viewing session details and messaging
