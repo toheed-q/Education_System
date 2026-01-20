@@ -63,7 +63,7 @@ export function Navigation() {
           
           {/* Logo */}
           <Link href="/" className="flex-shrink-0 cursor-pointer">
-            <img src={logo} alt="LernenTech" className="h-12 w-auto" />
+            <img src={logo} alt="LernenTech" className="h-16 w-auto" />
           </Link>
 
           {/* Desktop Nav */}
