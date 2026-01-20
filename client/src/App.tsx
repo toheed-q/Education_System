@@ -13,7 +13,9 @@ import Quiz from "@/pages/Quiz";
 import Tutors from "@/pages/Tutors";
 import TutorProfile from "@/pages/TutorProfile";
 import { Login, Register } from "@/pages/Auth";
-import Dashboard from "@/pages/Dashboard";
+import StudentDashboard from "@/pages/StudentDashboard";
+import TutorDashboard from "@/pages/TutorDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 function Router() {
   return (
@@ -28,11 +30,11 @@ function Router() {
       <Route path="/tutors/:id" component={TutorProfile} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/dashboard" component={Dashboard} />
       
-      {/* Role-specific dashboard routes - all use Dashboard with role-based content */}
-      <Route path="/tutor/dashboard" component={Dashboard} />
-      <Route path="/admin/dashboard" component={Dashboard} />
+      {/* Role-specific dashboards */}
+      <Route path="/dashboard" component={StudentDashboard} />
+      <Route path="/tutor/dashboard" component={TutorDashboard} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
       
       <Route component={NotFound} />
     </Switch>
