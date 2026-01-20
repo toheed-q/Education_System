@@ -51,55 +51,63 @@ export default function TutorDashboard() {
         </div>
 
         <div className="grid md:grid-cols-4 gap-6">
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-800">Total Earnings</CardTitle>
-              <Wallet className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-900" data-testid="text-total-earnings">
-                KES {netEarnings.toLocaleString()}
-              </div>
-              <p className="text-xs text-green-600">After 25% platform fee</p>
-            </CardContent>
-          </Card>
+          <Link href="/tutor/earnings">
+            <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 cursor-pointer hover-elevate transition-all" data-testid="card-earnings">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-green-800">Total Earnings</CardTitle>
+                <Wallet className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-900" data-testid="text-total-earnings">
+                  KES {netEarnings.toLocaleString()}
+                </div>
+                <p className="text-xs text-green-600">After 25% platform fee</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming Sessions</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-upcoming-count">
-                {upcomingBookings.length}
-              </div>
-              <p className="text-xs text-muted-foreground">Scheduled</p>
-            </CardContent>
-          </Card>
+          <Link href="/tutor/schedule">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-upcoming">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Upcoming Sessions</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-upcoming-count">
+                  {upcomingBookings.length}
+                </div>
+                <p className="text-xs text-muted-foreground">Scheduled</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed Sessions</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-completed-count">
-                {completedBookings.length}
-              </div>
-              <p className="text-xs text-muted-foreground">This month</p>
-            </CardContent>
-          </Card>
+          <Link href="/tutor/schedule">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-completed">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Completed Sessions</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-completed-count">
+                  {completedBookings.length}
+                </div>
+                <p className="text-xs text-muted-foreground">This month</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Messages</CardTitle>
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">0</div>
-              <p className="text-xs text-muted-foreground">Unread</p>
-            </CardContent>
-          </Card>
+          <Link href="/tutor/messages">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-messages">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Messages</CardTitle>
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">0</div>
+                <p className="text-xs text-muted-foreground">Unread</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">

@@ -1,7 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,8 @@ import {
   Calendar,
   Shield,
   Settings,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRight
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
@@ -80,57 +81,65 @@ export default function AdminDashboard() {
         </div>
 
         <div className="grid md:grid-cols-4 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Programs</CardTitle>
-              <GraduationCap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-programs-count">
-                {programsCount}
-              </div>
-              <p className="text-xs text-muted-foreground">Learning programs</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/programs">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-programs">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Programs</CardTitle>
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-programs-count">
+                  {programsCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Learning programs</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-courses-count">
-                {coursesCount}
-              </div>
-              <p className="text-xs text-muted-foreground">Available courses</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/courses">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-courses">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-courses-count">
+                  {coursesCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Available courses</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Tutors</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-tutors-count">
-                {tutorsCount}
-              </div>
-              <p className="text-xs text-muted-foreground">On platform</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/users?role=tutor">
+            <Card className="cursor-pointer hover-elevate transition-all" data-testid="card-tutors">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Tutors</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-tutors-count">
+                  {tutorsCount}
+                </div>
+                <p className="text-xs text-muted-foreground">On platform</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className={pendingVerifications > 0 ? "border-yellow-200 bg-yellow-50" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Verifications</CardTitle>
-              <CheckCircle className={`h-4 w-4 ${pendingVerifications > 0 ? 'text-yellow-600' : 'text-muted-foreground'}`} />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${pendingVerifications > 0 ? 'text-yellow-700' : ''}`} data-testid="text-verifications-count">
-                {pendingVerifications}
-              </div>
-              <p className="text-xs text-muted-foreground">Awaiting review</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/verifications">
+            <Card className={`cursor-pointer hover-elevate transition-all ${pendingVerifications > 0 ? "border-yellow-200 bg-yellow-50" : ""}`} data-testid="card-verifications">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Verifications</CardTitle>
+                <CheckCircle className={`h-4 w-4 ${pendingVerifications > 0 ? 'text-yellow-600' : 'text-muted-foreground'}`} />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${pendingVerifications > 0 ? 'text-yellow-700' : ''}`} data-testid="text-verifications-count">
+                  {pendingVerifications}
+                </div>
+                <p className="text-xs text-muted-foreground">Awaiting review</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
@@ -140,23 +149,43 @@ export default function AdminDashboard() {
               <CardDescription>Common administrative tasks</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start" data-testid="button-manage-users">
-                <Users className="w-4 h-4 mr-2" />
-                Manage Users
-              </Button>
-              <Button variant="outline" className="w-full justify-start" data-testid="button-manage-courses">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Manage Courses
-              </Button>
-              <Button variant="outline" className="w-full justify-start" data-testid="button-manage-programs">
-                <GraduationCap className="w-4 h-4 mr-2" />
-                Manage Programs
-              </Button>
-              {pendingVerifications > 0 && (
-                <Button className="w-full justify-start bg-yellow-600 hover:bg-yellow-700" data-testid="button-review-verifications">
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Review Verifications ({pendingVerifications})
+              <Link href="/admin/users">
+                <Button variant="outline" className="w-full justify-between" data-testid="button-manage-users">
+                  <span className="flex items-center">
+                    <Users className="w-4 h-4 mr-2" />
+                    Manage Users
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
                 </Button>
+              </Link>
+              <Link href="/admin/courses">
+                <Button variant="outline" className="w-full justify-between" data-testid="button-manage-courses">
+                  <span className="flex items-center">
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    Manage Courses
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <Link href="/admin/programs">
+                <Button variant="outline" className="w-full justify-between" data-testid="button-manage-programs">
+                  <span className="flex items-center">
+                    <GraduationCap className="w-4 h-4 mr-2" />
+                    Manage Programs
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              {pendingVerifications > 0 && (
+                <Link href="/admin/verifications">
+                  <Button className="w-full justify-between bg-yellow-600 hover:bg-yellow-700" data-testid="button-review-verifications">
+                    <span className="flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Review Verifications ({pendingVerifications})
+                    </span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
               )}
             </CardContent>
           </Card>
@@ -225,17 +254,19 @@ export default function AdminDashboard() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-4 p-4 bg-white rounded-lg border border-red-100">
-                <AlertTriangle className="w-5 h-5 text-amber-500" />
-                <div className="flex-1">
-                  <p className="font-medium text-slate-900">System Settings</p>
-                  <p className="text-sm text-slate-500">Configure platform-wide settings</p>
+              <Link href="/admin/settings">
+                <div className="flex items-center gap-4 p-4 bg-white rounded-lg border border-red-100 cursor-pointer hover:bg-red-50 transition-colors">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900">System Settings</p>
+                    <p className="text-sm text-slate-500">Configure platform-wide settings</p>
+                  </div>
+                  <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-100" data-testid="button-system-settings">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Configure
+                  </Button>
                 </div>
-                <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-100" data-testid="button-system-settings">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Configure
-                </Button>
-              </div>
+              </Link>
             </CardContent>
           </Card>
         )}
