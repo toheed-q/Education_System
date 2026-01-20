@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -21,6 +22,14 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Home, 
   BookOpen, 
@@ -43,7 +52,8 @@ import {
   Clock,
   CreditCard,
   User,
-  Search
+  Search,
+  Bell
 } from "lucide-react";
 import logo from "@assets/Lernentech_logo_1768655383502.png";
 
@@ -254,15 +264,33 @@ function MenuItemWithSub({ item, location }: { item: MenuItem; location: string 
   );
 }
 
+function getMessagesUrl(role: string): string {
+  switch (role) {
+    case "student":
+      return "/dashboard/messages";
+    case "tutor":
+      return "/tutor/messages";
+    default:
+      return "/dashboard/messages";
+  }
+}
+
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-count"],
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
   
   if (!user) return null;
   
   const menuItems = getMenuItems(user.role);
   const roleLabel = getRoleLabel(user.role);
   const roleBadgeColor = getRoleBadgeColor(user.role);
+  const unreadCount = unreadData?.count ?? 0;
   
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -322,14 +350,68 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </Sidebar>
         
         <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="h-14 border-b border-slate-200 bg-white flex items-center px-4 gap-4">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            {user.role === "super_admin" && (
-              <div className="flex items-center gap-2 text-sm text-red-600">
-                <Shield className="w-4 h-4" />
-                <span className="font-medium">Super Admin Mode</span>
-              </div>
-            )}
+          <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-4">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              {user.role === "super_admin" && (
+                <div className="flex items-center gap-2 text-sm text-red-600">
+                  <Shield className="w-4 h-4" />
+                  <span className="font-medium">Super Admin Mode</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Link href={getMessagesUrl(user.role)}>
+                <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
+                  <Bell className="h-5 w-5 text-slate-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-medium">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </Link>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2 px-2" data-testid="button-user-menu">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                        {user.name?.charAt(0) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium text-slate-700 hidden sm:inline">{user.name}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs text-slate-500">{user.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {user.role === "tutor" && (
+                    <DropdownMenuItem onClick={() => setLocation("/tutor/profile")} data-testid="menu-profile">
+                      <User className="w-4 h-4 mr-2" />
+                      Profile
+                    </DropdownMenuItem>
+                  )}
+                  {(user.role === "admin" || user.role === "super_admin") && (
+                    <DropdownMenuItem onClick={() => setLocation("/admin/settings")} data-testid="menu-settings">
+                      <Settings className="w-4 h-4 mr-2" />
+                      Settings
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => logout()} className="text-red-600" data-testid="menu-logout">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </header>
           <main className="flex-1 overflow-auto p-6">
             {children}

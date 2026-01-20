@@ -753,6 +753,14 @@ export async function registerRoutes(
     res.json(conversations);
   });
 
+  // Get total unread message count for dashboard
+  app.get("/api/messages/unread-count", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const conversations = await storage.getConversations((req.user as any).id);
+    const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+    res.json({ count: totalUnread });
+  });
+
   // Course Progression
   app.get("/api/courses/:id/progress", async (req, res) => {
     const courseId = Number(req.params.id);

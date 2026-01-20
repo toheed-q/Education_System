@@ -17,6 +17,11 @@ export default function TutorDashboard() {
     enabled: !!user,
   });
 
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread-count"],
+    enabled: !!user,
+  });
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -103,7 +108,7 @@ export default function TutorDashboard() {
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">0</div>
+                <div className="text-2xl font-bold" data-testid="text-unread-count">{unreadData?.count ?? 0}</div>
                 <p className="text-xs text-muted-foreground">Unread</p>
               </CardContent>
             </Card>
