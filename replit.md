@@ -115,6 +115,18 @@ Preferred communication style: Simple, everyday language.
 - **API Endpoints**: POST /api/courses and POST /api/programs (admin/super_admin only)
 - **Search/Filter**: Both pages have working search functionality
 
+### Tutor Verification System
+- **Verification Types**: School Tutoring (KES 500 fee), Higher Ed/Professional Skills (KES 300 fee)
+- **Document Submission**: Tutors upload document URLs (Google Drive, Dropbox, etc.) for certificates, transcripts, or qualifications
+- **National ID**: Optional national ID document URL for identity verification
+- **Admin Review**: Admins review documents and approve/reject with optional notes
+- **Status Sync**: Tutor profile verification status automatically updates on submit (pending), approve, or reject
+- **API Endpoints**:
+  - `POST /api/verification-requests` - Tutor submits verification request
+  - `GET /api/verification-requests/my` - Tutor views their requests
+  - `GET /api/admin/verification-requests` - Admin views pending requests
+  - `PATCH /api/admin/verification-requests/:id` - Admin approves/rejects
+
 ### Test Accounts (password: password123)
 - `student@lernentech.com` - Student role
 - `tutor@lernentech.com` - Tutor role
