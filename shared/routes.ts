@@ -80,7 +80,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/programs',
       responses: {
-        200: z.array(z.custom<typeof programs.$inferSelect>()),
+        200: z.array(z.custom<typeof programs.$inferSelect & { courseCount: number }>()),
       },
     },
     get: {
@@ -104,7 +104,13 @@ export const api = {
       method: 'GET' as const,
       path: '/api/courses/:id',
       responses: {
-        200: z.custom<typeof courses.$inferSelect & { weeks: (typeof courseWeeks.$inferSelect & { content: typeof courseContent.$inferSelect[], quiz?: typeof quizzes.$inferSelect })[] }>(),
+        // Response varies based on enrollment - full content for enrolled, preview for non-enrolled
+        200: z.custom<typeof courses.$inferSelect & { 
+          weeks: (typeof courseWeeks.$inferSelect & { 
+            content: { id: number; title: string; type: string; sequenceOrder: number; contentUrl?: string; contentText?: string }[]; 
+            quiz?: { id: number; title: string; passScorePercent: number; isFinalExam: boolean } 
+          })[] 
+        }>(),
         404: errorSchemas.notFound,
       },
     },

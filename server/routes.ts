@@ -129,12 +129,40 @@ export async function registerRoutes(
     if (!course) return res.status(404).json({ message: "Course not found" });
     
     const weeks = await storage.getCourseWeeks(courseId);
+    
+    // Check if user is enrolled
+    const isAuthenticated = req.isAuthenticated();
+    const userId = isAuthenticated ? (req.user as any).id : null;
+    const isEnrolled = userId ? await storage.isUserEnrolledInCourse(userId, courseId) : false;
+    
     const weeksWithContent = await Promise.all(weeks.map(async w => {
       const content = await storage.getWeekContent(w.id);
       const quiz = await storage.getWeekQuiz(w.id);
-      return { ...w, content, quiz };
+      
+      if (isEnrolled) {
+        // Return full content for enrolled users
+        return { ...w, content, quiz };
+      } else {
+        // Return limited info for non-enrolled users (preview mode)
+        // Only include metadata, exclude contentUrl and contentText
+        return { 
+          ...w, 
+          content: content.map(c => ({ 
+            id: c.id, 
+            title: c.title, 
+            type: c.type, 
+            sequenceOrder: c.sequenceOrder 
+          })),
+          quiz: quiz ? { 
+            id: quiz.id, 
+            title: quiz.title, 
+            passScorePercent: quiz.passScorePercent, 
+            isFinalExam: quiz.isFinalExam 
+          } : undefined
+        };
+      }
     }));
-
+    
     res.json({ ...course, weeks: weeksWithContent });
   });
 
@@ -201,7 +229,10 @@ export async function registerRoutes(
     const weeks = await storage.getCourseWeeks(courseId);
     const sortedWeeks = weeks.sort((a, b) => a.weekNumber - b.weekNumber);
     
-    if (!req.isAuthenticated()) {
+    const userId = req.isAuthenticated() ? (req.user as any).id : null;
+    const isEnrolled = userId ? await storage.isUserEnrolledInCourse(userId, courseId) : false;
+    
+    if (!isEnrolled) {
       const progress = sortedWeeks.map((w, i) => ({
         weekId: w.id,
         weekNumber: w.weekNumber,
@@ -211,8 +242,7 @@ export async function registerRoutes(
       return res.json({ enrolled: false, progress });
     }
     
-    const userId = (req.user as any).id;
-    const passedAttempts = await storage.getPassedQuizAttempts(userId);
+    const passedAttempts = await storage.getPassedQuizAttempts(userId!);
     const passedQuizIds = new Set(passedAttempts.map(a => a.quizId));
     
     const weeksWithQuizzes = await Promise.all(sortedWeeks.map(async w => {

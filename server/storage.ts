@@ -47,6 +47,9 @@ export interface IStorage {
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
 
+  // Enrollments
+  isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean>;
+
   // Quizzes
   getQuiz(id: number): Promise<Quiz | undefined>;
   getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
@@ -202,6 +205,26 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: InsertMessage): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
+  }
+
+  async isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean> {
+    // Check direct course enrollment
+    const [directEnrollment] = await db.select()
+      .from(enrollments)
+      .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
+    
+    if (directEnrollment) return true;
+    
+    // Check if enrolled in a program that contains this course
+    const course = await this.getCourse(courseId);
+    if (course?.programId) {
+      const [programEnrollment] = await db.select()
+        .from(enrollments)
+        .where(and(eq(enrollments.userId, userId), eq(enrollments.programId, course.programId)));
+      if (programEnrollment) return true;
+    }
+    
+    return false;
   }
 
   async getQuiz(id: number): Promise<Quiz | undefined> {

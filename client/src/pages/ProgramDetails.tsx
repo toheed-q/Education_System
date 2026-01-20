@@ -35,7 +35,7 @@ export default function ProgramDetails() {
     );
   }
 
-  const courses = (program as any).courses || [];
+  const courses = program.courses || [];
 
   return (
     <div className="min-h-screen bg-slate-50">

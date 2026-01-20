@@ -262,6 +262,7 @@ export default function CourseDetails() {
 
   const weeks = (course.weeks as Week[]) || [];
   const totalLessons = weeks.reduce((sum, w) => sum + (w.content?.length || 0), 0);
+  const isEnrolled = progressData?.enrolled || false;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -289,75 +290,177 @@ export default function CourseDetails() {
               {course.description}
             </p>
             
-            <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4">
-              <Button 
-                size="lg" 
-                className="w-full sm:w-auto bg-primary hover:bg-primary/90 h-14 px-8 text-lg rounded-full"
-                data-testid="button-enroll"
-              >
-                Enroll Now - KES {course.price.toLocaleString()}
-              </Button>
-              <span className="text-slate-400 text-sm">
-                30-day money-back guarantee
-              </span>
-            </div>
+            {!isEnrolled && (
+              <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4">
+                <Button 
+                  size="lg" 
+                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 h-14 px-8 text-lg rounded-full"
+                  data-testid="button-enroll"
+                >
+                  Enroll Now - KES {course.price.toLocaleString()}
+                </Button>
+                <span className="text-slate-400 text-sm">
+                  30-day money-back guarantee
+                </span>
+              </div>
+            )}
+            {isEnrolled && (
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">You are enrolled in this course</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 pb-24">
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 order-2 lg:order-1">
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sticky top-24">
-              <h2 className="text-lg font-bold font-display text-slate-900 mb-4">Course Curriculum</h2>
-              
-              <div className="space-y-3">
-                {weeks.map((week, index) => {
-                  const status = weekUnlockStatus[week.id];
-                  const isLocked = status ? !status.unlocked : index > 0;
-                  const isCompleted = status?.completed || false;
-                  
-                  return (
-                    <WeekAccordion
-                      key={week.id}
-                      week={week}
-                      index={index}
-                      isExpanded={expandedWeek === week.id}
-                      onToggle={() => setExpandedWeek(expandedWeek === week.id ? null : week.id)}
-                      isLocked={isLocked}
-                      isCompleted={isCompleted}
-                      onSelectContent={setSelectedContent}
-                      selectedContentId={selectedContent?.id}
-                    />
-                  );
-                })}
+        {isEnrolled ? (
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1 order-2 lg:order-1">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sticky top-24">
+                <h2 className="text-lg font-bold font-display text-slate-900 mb-4">Course Curriculum</h2>
+                
+                <div className="space-y-3">
+                  {weeks.map((week, index) => {
+                    const status = weekUnlockStatus[week.id];
+                    const isLocked = status ? !status.unlocked : index > 0;
+                    const isCompleted = status?.completed || false;
+                    
+                    return (
+                      <WeekAccordion
+                        key={week.id}
+                        week={week}
+                        index={index}
+                        isExpanded={expandedWeek === week.id}
+                        onToggle={() => setExpandedWeek(expandedWeek === week.id ? null : week.id)}
+                        isLocked={isLocked}
+                        isCompleted={isCompleted}
+                        onSelectContent={setSelectedContent}
+                        selectedContentId={selectedContent?.id}
+                      />
+                    );
+                  })}
 
-                {weeks.length === 0 && (
-                  <div className="text-center py-8 text-slate-500">
-                    Course content is being updated. Check back soon!
+                  {weeks.length === 0 && (
+                    <div className="text-center py-8 text-slate-500">
+                      Course content is being updated. Check back soon!
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="lg:col-span-2 order-1 lg:order-2">
+              {selectedContent ? (
+                <ContentPlayer content={selectedContent} />
+              ) : (
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
+                  <div className="text-center py-12">
+                    <BookOpen className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                    <h3 className="text-xl font-semibold text-slate-700 mb-2">Welcome to {course.title}</h3>
+                    <p className="text-slate-500 max-w-md mx-auto">
+                      Select a lesson from the curriculum on the left to begin learning. 
+                      Complete each week's content and quiz to unlock the next week.
+                    </p>
                   </div>
-                )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
+                <h2 className="text-2xl font-bold text-slate-900 mb-6">Course Overview</h2>
+                
+                <div className="prose prose-slate max-w-none mb-8">
+                  <p className="text-slate-600 text-lg">{course.description}</p>
+                </div>
+
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">What You'll Learn</h3>
+                <div className="grid sm:grid-cols-2 gap-3 mb-8">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                    <span className="text-slate-600">Comprehensive curriculum over {weeks.length} weeks</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                    <span className="text-slate-600">{totalLessons} lessons with practical content</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                    <span className="text-slate-600">Weekly quizzes to test your knowledge</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                    <span className="text-slate-600">Certificate upon completion</span>
+                  </div>
+                </div>
+
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Curriculum Preview</h3>
+                <div className="space-y-3">
+                  {weeks.map((week, index) => (
+                    <div 
+                      key={week.id}
+                      className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-slate-900">{week.title}</h4>
+                        <p className="text-sm text-slate-500">
+                          {week.content?.length || 0} lessons
+                          {week.quiz && " · Quiz included"}
+                        </p>
+                      </div>
+                      <Lock className="w-5 h-5 text-slate-300" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sticky top-24">
+                <div className="text-center mb-6">
+                  <p className="text-sm text-slate-500 mb-1">Course Price</p>
+                  <p className="text-4xl font-bold text-slate-900">
+                    KES {course.price.toLocaleString()}
+                  </p>
+                </div>
+                
+                <Button 
+                  className="w-full mb-4" 
+                  size="lg"
+                  data-testid="button-enroll-sidebar"
+                >
+                  Enroll Now
+                </Button>
+                
+                <p className="text-xs text-slate-500 text-center mb-6">
+                  30-day money-back guarantee
+                </p>
+
+                <div className="space-y-4 pt-6 border-t border-slate-100">
+                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                    <Clock className="w-4 h-4 text-slate-400" />
+                    <span>{weeks.length} weeks of content</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                    <BookOpen className="w-4 h-4 text-slate-400" />
+                    <span>{totalLessons} lessons</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                    <Award className="w-4 h-4 text-slate-400" />
+                    <span>Certificate included</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          
-          <div className="lg:col-span-2 order-1 lg:order-2">
-            {selectedContent ? (
-              <ContentPlayer content={selectedContent} />
-            ) : (
-              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
-                <div className="text-center py-12">
-                  <BookOpen className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-xl font-semibold text-slate-700 mb-2">Welcome to {course.title}</h3>
-                  <p className="text-slate-500 max-w-md mx-auto">
-                    Select a lesson from the curriculum on the left to begin learning. 
-                    Complete each week's content and quiz to unlock the next week.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </main>
     </div>
   );
