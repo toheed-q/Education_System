@@ -238,8 +238,35 @@ export async function registerRoutes(
     }
     
     try {
-      const { tutorId, startTime, endTime, amount } = req.body;
+      const { tutorId, startTime, endTime } = req.body;
       const user = req.user as any;
+      
+      // Validate user is a student
+      if (user.role !== "student") {
+        return res.status(403).json({ message: "Only students can book tutoring sessions" });
+      }
+      
+      // Validate start/end times
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ message: "Invalid date/time provided" });
+      }
+      if (end <= start) {
+        return res.status(400).json({ message: "End time must be after start time" });
+      }
+      if (start < new Date()) {
+        return res.status(400).json({ message: "Cannot book sessions in the past" });
+      }
+      
+      // Get tutor profile to use authoritative hourly rate (not client-supplied amount)
+      const tutorProfile = await storage.getTutorProfile(tutorId);
+      if (!tutorProfile) {
+        return res.status(404).json({ message: "Tutor not found" });
+      }
+      
+      // Use tutor's authoritative hourly rate
+      const amount = tutorProfile.hourlyRate;
       
       // Calculate platform fee (25%)
       const platformFeeKes = Math.round(amount * 0.25);
