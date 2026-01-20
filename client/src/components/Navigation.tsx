@@ -53,11 +53,8 @@ export function Navigation() {
         <div className="flex justify-between items-center h-20">
           
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0 flex items-center gap-2 cursor-pointer">
-            <img src={logo} alt="LernenTech" className="h-10 w-auto" />
-            <span className="text-xl font-display font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent hidden sm:block">
-              LernenTech
-            </span>
+          <Link href="/" className="flex-shrink-0 cursor-pointer">
+            <img src={logo} alt="LernenTech" className="h-12 w-auto" />
           </Link>
 
           {/* Desktop Nav */}

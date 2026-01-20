@@ -275,7 +275,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <Sidebar className="border-r border-slate-200">
           <SidebarHeader className="p-4 border-b border-slate-100">
             <Link href="/">
-              <img src={logo} alt="LernenTech" className="h-8 cursor-pointer" />
+              <img src={logo} alt="LernenTech" className="h-10 cursor-pointer" />
             </Link>
           </SidebarHeader>
           
