@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type LoginRequest, type RegisterRequest } from "@shared/routes";
+import { api } from "@shared/routes";
 import { useLocation } from "wouter";
+import { z } from "zod";
+
+type LoginRequest = z.infer<typeof api.auth.login.input>;
+type RegisterRequest = z.infer<typeof api.auth.register.input>;
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -34,7 +38,7 @@ export function useAuth() {
     onSuccess: (data) => {
       queryClient.setQueryData([api.auth.me.path], data);
       if (data.role === 'tutor') setLocation('/tutor/dashboard');
-      else if (data.role === 'admin') setLocation('/admin/dashboard');
+      else if (data.role === 'admin' || data.role === 'super_admin') setLocation('/admin/dashboard');
       else setLocation('/dashboard');
     },
   });

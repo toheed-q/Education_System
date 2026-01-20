@@ -348,6 +348,21 @@ export async function registerRoutes(
     });
 
     // Tutors
+    // Main tutor test account (per requirements)
+    const tutorMain = await storage.createUser({
+      email: "tutor@lernentech.com",
+      password,
+      name: "Test Tutor",
+      role: "tutor",
+      isVerified: true
+    });
+    await storage.createTutorProfile({
+      userId: tutorMain.id,
+      bio: "Experienced multi-subject tutor with expertise in various academic disciplines. Available for online and in-person sessions.",
+      hourlyRate: 1500,
+      subjects: ["Mathematics", "English", "Science"]
+    });
+
     const tutor1 = await storage.createUser({
       email: "james.mwangi@lernentech.com",
       password,

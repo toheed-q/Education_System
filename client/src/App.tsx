@@ -30,8 +30,9 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/dashboard" component={Dashboard} />
       
-      {/* Tutor Routes Placeholder - would have distinct layout/auth checks */}
+      {/* Role-specific dashboard routes - all use Dashboard with role-based content */}
       <Route path="/tutor/dashboard" component={Dashboard} />
+      <Route path="/admin/dashboard" component={Dashboard} />
       
       <Route component={NotFound} />
     </Switch>
