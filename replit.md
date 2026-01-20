@@ -84,7 +84,11 @@ Preferred communication style: Simple, everyday language.
 ### Tutor Marketplace Implementation  
 - **Tutor Profile Page** (`TutorProfile.tsx`): Complete tutor profile with bio, subjects, hourly rate, and reviews
 - **Booking Modal**: Date/time selection for session booking with KES pricing
-- **Booking API**: POST /api/bookings creates sessions with student from session, tutor, time range, and price
+- **Session Types**: Online (video call) or In-Person (physical location) session options
+- **Meeting Links**: Tutors can add video meeting links (Zoom, Google Meet, etc.) for online sessions
+- **Location Field**: Physical sessions require a location to be specified by the student
+- **Booking API**: POST /api/bookings/initiate-payment creates payment intent with session type and location
+- **Payment-First Flow**: Students pay via Paystack before booking is created; 25% platform fee calculated server-side
 
 ### Programs Page
 - **Programs List** (`Programs.tsx`): Displays available learning programs with exact course counts and enrollment options

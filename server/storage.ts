@@ -42,13 +42,14 @@ export interface IStorage {
 
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
-  createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; pricePaid: number; paystackReference: string }): Promise<Booking>;
+  createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; sessionType: string; location?: string | null; pricePaid: number; paystackReference: string }): Promise<Booking>;
   getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]>;
   getBooking(id: number): Promise<Booking | undefined>;
   updateBookingStatus(id: number, status: "pending" | "confirmed" | "completed" | "cancelled"): Promise<Booking | undefined>;
+  updateBookingMeetingLink(id: number, meetingLink: string): Promise<Booking | undefined>;
   
   // Payment Intents
-  createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent>;
+  createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; sessionType: string; location?: string | null; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent>;
   getPaymentIntent(paystackReference: string): Promise<BookingPaymentIntent | undefined>;
   markPaymentIntentPaid(paystackReference: string): Promise<BookingPaymentIntent | undefined>;
   
@@ -195,20 +196,25 @@ export class DatabaseStorage implements IStorage {
     return newBooking;
   }
 
-  async createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; pricePaid: number; paystackReference: string }): Promise<Booking> {
+  async createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; sessionType: string; location?: string | null; pricePaid: number; paystackReference: string }): Promise<Booking> {
     const [newBooking] = await db.insert(bookings).values({
       studentId: data.studentId,
       tutorId: data.tutorId,
       startTime: data.startTime,
       endTime: data.endTime,
+      sessionType: data.sessionType as "online" | "physical",
+      location: data.location,
       pricePaid: data.pricePaid,
       paystackReference: data.paystackReference,
     }).returning();
     return newBooking;
   }
 
-  async createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent> {
-    const [newIntent] = await db.insert(bookingPaymentIntents).values(intent).returning();
+  async createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; sessionType: string; location?: string | null; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent> {
+    const [newIntent] = await db.insert(bookingPaymentIntents).values({
+      ...intent,
+      sessionType: intent.sessionType as "online" | "physical",
+    }).returning();
     return newIntent;
   }
 
@@ -233,6 +239,14 @@ export class DatabaseStorage implements IStorage {
   async updateBookingStatus(id: number, status: "pending" | "confirmed" | "completed" | "cancelled"): Promise<Booking | undefined> {
     const [updated] = await db.update(bookings)
       .set({ status })
+      .where(eq(bookings.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateBookingMeetingLink(id: number, meetingLink: string): Promise<Booking | undefined> {
+    const [updated] = await db.update(bookings)
+      .set({ meetingLink })
       .where(eq(bookings.id, id))
       .returning();
     return updated;

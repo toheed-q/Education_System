@@ -6,6 +6,7 @@ import { z } from "zod";
 export const userRoleEnum = pgEnum("user_role", ["super_admin", "admin", "student", "tutor"]);
 export const contentTypeEnum = pgEnum("content_type", ["video", "reading", "file", "link"]);
 export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "completed", "cancelled"]);
+export const sessionTypeEnum = pgEnum("session_type", ["online", "physical"]);
 export const paymentIntentStatusEnum = pgEnum("payment_intent_status", ["initiated", "paid", "failed", "expired"]);
 export const verificationStatusEnum = pgEnum("verification_status", ["pending", "approved", "rejected"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "rejected"]);
@@ -123,8 +124,10 @@ export const bookings = pgTable("bookings", {
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
   status: bookingStatusEnum("status").default("pending"),
+  sessionType: sessionTypeEnum("session_type").default("online"),
+  location: text("location"), // For physical sessions
   pricePaid: integer("price_paid_kes").notNull(),
-  meetingLink: text("meeting_link"),
+  meetingLink: text("meeting_link"), // For online sessions
   paystackReference: text("paystack_reference"),
 });
 
@@ -134,6 +137,8 @@ export const bookingPaymentIntents = pgTable("booking_payment_intents", {
   tutorId: integer("tutor_id").notNull().references(() => users.id),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
+  sessionType: sessionTypeEnum("session_type").default("online"),
+  location: text("location"), // For physical sessions
   amountKes: integer("amount_kes").notNull(),
   platformFeeKes: integer("platform_fee_kes").notNull(), // 25% platform fee
   tutorShareKes: integer("tutor_share_kes").notNull(), // 75% for tutor

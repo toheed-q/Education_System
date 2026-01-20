@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, User, ArrowRight, Video } from "lucide-react";
+import { Calendar, Clock, User, ArrowRight, Video, MapPin } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
 export default function StudentBookings() {
@@ -84,18 +84,44 @@ export default function StudentBookings() {
                                 <Clock className="w-4 h-4" />
                                 {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
+                              <Badge variant="outline" className="ml-2">
+                                {booking.sessionType === "physical" ? (
+                                  <><MapPin className="w-3 h-3 mr-1" /> In-Person</>
+                                ) : (
+                                  <><Video className="w-3 h-3 mr-1" /> Online</>
+                                )}
+                              </Badge>
                             </div>
+                            {booking.sessionType === "physical" && booking.location && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                <MapPin className="w-3 h-3 inline mr-1" />
+                                {booking.location}
+                              </p>
+                            )}
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-slate-900">KES {booking.price?.toLocaleString()}</p>
+                            <p className="font-bold text-slate-900">KES {(booking.pricePaid || booking.price)?.toLocaleString()}</p>
                             <Badge variant={booking.status === 'confirmed' ? 'default' : 'secondary'}>
                               {booking.status}
                             </Badge>
                           </div>
-                          <Button size="sm" data-testid={`button-join-${booking.id}`}>
-                            <Video className="w-4 h-4 mr-1" />
-                            Join
-                          </Button>
+                          {booking.sessionType === "online" || !booking.sessionType ? (
+                            <Button 
+                              size="sm" 
+                              onClick={() => booking.meetingLink && window.open(booking.meetingLink, '_blank')} 
+                              disabled={!booking.meetingLink}
+                              variant={booking.meetingLink ? "default" : "secondary"}
+                              data-testid={`button-join-${booking.id}`}
+                            >
+                              <Video className="w-4 h-4 mr-1" />
+                              {booking.meetingLink ? "Join" : "Awaiting Link"}
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" data-testid={`button-location-${booking.id}`}>
+                              <MapPin className="w-4 h-4 mr-1" />
+                              View Location
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

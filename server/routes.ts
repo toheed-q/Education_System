@@ -238,12 +238,25 @@ export async function registerRoutes(
     }
     
     try {
-      const { tutorId, startTime, endTime } = req.body;
+      const { tutorId, startTime, endTime, sessionType, location } = req.body;
       const user = req.user as any;
       
       // Validate user is a student
       if (user.role !== "student") {
         return res.status(403).json({ message: "Only students can book tutoring sessions" });
+      }
+      
+      // Validate session type (strict enum validation - reject invalid values)
+      const validSessionTypes = ["online", "physical"] as const;
+      const trimmedSessionType = typeof sessionType === "string" ? sessionType.trim().toLowerCase() : "";
+      if (!validSessionTypes.includes(trimmedSessionType as any)) {
+        return res.status(400).json({ message: "Invalid session type. Must be 'online' or 'physical'" });
+      }
+      const validatedSessionType = trimmedSessionType as "online" | "physical";
+      
+      // Validate location required for physical sessions
+      if (validatedSessionType === "physical" && (!location || typeof location !== "string" || !location.trim())) {
+        return res.status(400).json({ message: "Location is required for in-person sessions" });
       }
       
       // Validate start/end times
@@ -281,12 +294,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "User not found" });
       }
       
-      // Create payment intent in database
+      // Create payment intent in database with validated session type
+      const trimmedLocation = validatedSessionType === "physical" ? location.trim() : null;
       const intent = await storage.createPaymentIntent({
         studentId: user.id,
         tutorId,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
+        sessionType: validatedSessionType as "online" | "physical",
+        location: trimmedLocation,
         amountKes: amount,
         platformFeeKes,
         tutorShareKes,
@@ -369,12 +385,14 @@ export async function registerRoutes(
       // Mark intent as paid
       await storage.markPaymentIntentPaid(reference);
       
-      // Create the actual booking
+      // Create the actual booking with session type and location
       const booking = await storage.createBookingFromPayment({
         studentId: intent.studentId,
         tutorId: intent.tutorId,
         startTime: intent.startTime,
         endTime: intent.endTime,
+        sessionType: intent.sessionType || "online",
+        location: intent.location,
         pricePaid: intent.amountKes,
         paystackReference: reference,
       });
@@ -441,6 +459,49 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Booking status update error:", err);
       res.status(500).json({ message: "Failed to update booking status" });
+    }
+  });
+
+  // Add meeting link to booking (tutors only)
+  app.patch("/api/bookings/:id/meeting-link", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const bookingId = Number(req.params.id);
+    const { meetingLink } = req.body;
+    const user = req.user as any;
+    
+    if (!meetingLink || typeof meetingLink !== "string" || !meetingLink.trim()) {
+      return res.status(400).json({ message: "Meeting link is required" });
+    }
+    
+    // Basic URL validation
+    try {
+      new URL(meetingLink);
+    } catch {
+      return res.status(400).json({ message: "Please enter a valid URL for the meeting link" });
+    }
+    
+    try {
+      // Only tutors can add meeting links to their own bookings
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      if (booking.tutorId !== user.id) {
+        return res.status(403).json({ message: "You can only add meeting links to your own bookings" });
+      }
+      
+      // Only online sessions need meeting links
+      if (booking.sessionType === "physical") {
+        return res.status(400).json({ message: "Physical sessions don't need meeting links" });
+      }
+      
+      const updated = await storage.updateBookingMeetingLink(bookingId, meetingLink);
+      res.json(updated);
+    } catch (err) {
+      console.error("Meeting link update error:", err);
+      res.status(500).json({ message: "Failed to add meeting link" });
     }
   });
 

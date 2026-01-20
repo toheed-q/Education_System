@@ -3,7 +3,7 @@ import { useTutor } from "@/hooks/use-tutors";
 import { useRoute, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send, CreditCard } from "lucide-react";
+import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send, CreditCard, Video, MapPin } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
@@ -38,6 +38,8 @@ export default function TutorProfile() {
   const [messageOpen, setMessageOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
+  const [sessionType, setSessionType] = useState<"online" | "physical">("online");
+  const [location, setLocation] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
@@ -65,7 +67,7 @@ export default function TutorProfile() {
   });
 
   const initiatePayment = useMutation({
-    mutationFn: async (data: { tutorId: number; startTime: string; endTime: string; amount: number }) => {
+    mutationFn: async (data: { tutorId: number; startTime: string; endTime: string; sessionType: string; location?: string }) => {
       const response = await apiRequest("POST", "/api/bookings/initiate-payment", data);
       return response.json();
     },
@@ -105,6 +107,14 @@ export default function TutorProfile() {
 
   const handleBookSession = async () => {
     if (!tutor || !selectedDate || !selectedTime || !user) return;
+    if (sessionType === "physical" && !location.trim()) {
+      toast({
+        title: "Location Required",
+        description: "Please enter a meeting location for physical sessions.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const startTime = new Date(`${selectedDate}T${selectedTime}:00`);
     const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour session
@@ -117,7 +127,8 @@ export default function TutorProfile() {
         tutorId: tutor.user.id,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        amount: tutor.hourlyRate,
+        sessionType,
+        location: sessionType === "physical" ? location.trim() : undefined,
       });
       
       // Step 2: Open Paystack popup
@@ -263,6 +274,52 @@ export default function TutorProfile() {
                   </DialogHeader>
                   
                   <div className="py-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Session Type</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setSessionType("online")}
+                          className={cn(
+                            "p-3 rounded-lg border text-center transition-all flex items-center justify-center gap-2",
+                            sessionType === "online" 
+                              ? "border-primary bg-primary/5 text-primary" 
+                              : "border-slate-200 hover:border-slate-300"
+                          )}
+                          data-testid="button-session-online"
+                        >
+                          <Video className="w-4 h-4" />
+                          Online
+                        </button>
+                        <button
+                          onClick={() => setSessionType("physical")}
+                          className={cn(
+                            "p-3 rounded-lg border text-center transition-all flex items-center justify-center gap-2",
+                            sessionType === "physical" 
+                              ? "border-primary bg-primary/5 text-primary" 
+                              : "border-slate-200 hover:border-slate-300"
+                          )}
+                          data-testid="button-session-physical"
+                        >
+                          <MapPin className="w-4 h-4" />
+                          In-Person
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {sessionType === "physical" && (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Meeting Location</label>
+                        <input
+                          type="text"
+                          value={location}
+                          onChange={(e) => setLocation(e.target.value)}
+                          placeholder="e.g., University Library, 123 Main St"
+                          className="w-full p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          data-testid="input-booking-location"
+                        />
+                      </div>
+                    )}
+                    
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Select Date</label>
                       <input

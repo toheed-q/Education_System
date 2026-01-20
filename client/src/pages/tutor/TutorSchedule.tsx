@@ -5,14 +5,20 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, User, Check, X, Loader2 } from "lucide-react";
+import { Calendar, Clock, User, Check, X, Loader2, Video, MapPin, Link2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export default function TutorSchedule() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [meetingLinkOpen, setMeetingLinkOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [meetingLink, setMeetingLink] = useState("");
 
   const { data: bookings, isLoading } = useQuery({
     queryKey: ["/api/bookings"],
@@ -41,6 +47,42 @@ export default function TutorSchedule() {
       });
     },
   });
+
+  const addMeetingLink = useMutation({
+    mutationFn: async ({ bookingId, meetingLink }: { bookingId: number; meetingLink: string }) => {
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}/meeting-link`, { meetingLink });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Meeting Link Added!",
+        description: "The student will see the meeting link for their session.",
+      });
+      setMeetingLinkOpen(false);
+      setMeetingLink("");
+      setSelectedBooking(null);
+    },
+    onError: () => {
+      toast({
+        title: "Failed to add meeting link",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddMeetingLink = (booking: any) => {
+    setSelectedBooking(booking);
+    setMeetingLink(booking.meetingLink || "");
+    setMeetingLinkOpen(true);
+  };
+
+  const handleSaveMeetingLink = () => {
+    if (selectedBooking && meetingLink.trim()) {
+      addMeetingLink.mutate({ bookingId: selectedBooking.id, meetingLink: meetingLink.trim() });
+    }
+  };
 
   if (authLoading) {
     return (
@@ -110,7 +152,20 @@ export default function TutorSchedule() {
                                 <Clock className="w-4 h-4" />
                                 {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
+                              <Badge variant="outline" className="ml-2">
+                                {booking.sessionType === "physical" ? (
+                                  <><MapPin className="w-3 h-3 mr-1" /> In-Person</>
+                                ) : (
+                                  <><Video className="w-3 h-3 mr-1" /> Online</>
+                                )}
+                              </Badge>
                             </div>
+                            {booking.sessionType === "physical" && booking.location && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                <MapPin className="w-3 h-3 inline mr-1" />
+                                {booking.location}
+                              </p>
+                            )}
                           </div>
                           <p className="font-bold text-slate-900">
                             KES {(booking.pricePaid || booking.price)?.toLocaleString()}
@@ -181,12 +236,36 @@ export default function TutorSchedule() {
                                 <Clock className="w-4 h-4" />
                                 {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
+                              <Badge variant="outline" className="ml-2">
+                                {booking.sessionType === "physical" ? (
+                                  <><MapPin className="w-3 h-3 mr-1" /> In-Person</>
+                                ) : (
+                                  <><Video className="w-3 h-3 mr-1" /> Online</>
+                                )}
+                              </Badge>
                             </div>
+                            {booking.sessionType === "physical" && booking.location && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                <MapPin className="w-3 h-3 inline mr-1" />
+                                {booking.location}
+                              </p>
+                            )}
                           </div>
                           <p className="font-bold text-slate-900">
                             KES {(booking.pricePaid || booking.price)?.toLocaleString()}
                           </p>
                           <Badge variant="default">Confirmed</Badge>
+                          {(booking.sessionType === "online" || !booking.sessionType) && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => handleAddMeetingLink(booking)}
+                              data-testid={`button-add-link-${booking.id}`}
+                            >
+                              <Link2 className="w-4 h-4 mr-1" />
+                              {booking.meetingLink ? "Edit Link" : "Add Link"}
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -204,6 +283,44 @@ export default function TutorSchedule() {
             </div>
           </div>
         )}
+
+        <Dialog open={meetingLinkOpen} onOpenChange={setMeetingLinkOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Meeting Link</DialogTitle>
+              <DialogDescription>
+                Add a video call link (Zoom, Google Meet, etc.) for your session with {selectedBooking?.student?.name || "the student"}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Input
+                type="url"
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+                placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                className="w-full"
+                data-testid="input-meeting-link"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setMeetingLinkOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveMeetingLink}
+                disabled={!meetingLink.trim() || addMeetingLink.isPending}
+                data-testid="button-save-link"
+              >
+                {addMeetingLink.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Link2 className="w-4 h-4 mr-2" />
+                )}
+                Save Link
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
