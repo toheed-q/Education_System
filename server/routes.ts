@@ -9,6 +9,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import argon2 from "argon2";
 import { users } from "@shared/schema";
 import { generateSlug } from "@shared/utils";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -62,6 +63,9 @@ export async function registerRoutes(
       done(err);
     }
   });
+
+  // Object Storage Routes
+  registerObjectStorageRoutes(app);
 
   // API Routes
   

@@ -4,15 +4,15 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, Shield, GraduationCap, School, Upload, Loader2, Clock, XCircle, FileText, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle, Shield, GraduationCap, School, Upload, Loader2, Clock, XCircle, FileText, X, Image } from "lucide-react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUpload } from "@/hooks/use-upload";
 
 export default function TutorVerification() {
   const { user, isLoading: authLoading } = useAuth();
@@ -20,9 +20,36 @@ export default function TutorVerification() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<"school" | "higher_ed" | null>(null);
-  const [documentUrl, setDocumentUrl] = useState("");
-  const [nationalIdUrl, setNationalIdUrl] = useState("");
+  const [documentPath, setDocumentPath] = useState("");
+  const [documentName, setDocumentName] = useState("");
+  const [nationalIdPath, setNationalIdPath] = useState("");
+  const [nationalIdName, setNationalIdName] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
+  
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const nationalIdInputRef = useRef<HTMLInputElement>(null);
+
+  const { uploadFile: uploadDocument, isUploading: isUploadingDocument } = useUpload({
+    onSuccess: (response) => {
+      setDocumentPath(response.objectPath);
+      setDocumentName(response.metadata.name);
+      toast({ title: "Document uploaded successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to upload document", variant: "destructive" });
+    },
+  });
+
+  const { uploadFile: uploadNationalId, isUploading: isUploadingNationalId } = useUpload({
+    onSuccess: (response) => {
+      setNationalIdPath(response.objectPath);
+      setNationalIdName(response.metadata.name);
+      toast({ title: "National ID uploaded successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to upload National ID", variant: "destructive" });
+    },
+  });
 
   const { data: myRequests, isLoading: requestsLoading } = useQuery({
     queryKey: ["/api/verification-requests/my"],
@@ -53,8 +80,10 @@ export default function TutorVerification() {
   });
 
   const resetForm = () => {
-    setDocumentUrl("");
-    setNationalIdUrl("");
+    setDocumentPath("");
+    setDocumentName("");
+    setNationalIdPath("");
+    setNationalIdName("");
     setAdditionalNotes("");
     setSelectedType(null);
   };
@@ -64,13 +93,61 @@ export default function TutorVerification() {
     setDialogOpen(true);
   };
 
+  const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ["image/jpeg", "image/png", "image/gif", "application/pdf"];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a JPG, PNG, GIF, or PDF file",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Maximum file size is 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      await uploadDocument(file);
+    }
+  };
+
+  const handleNationalIdSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ["image/jpeg", "image/png", "image/gif", "application/pdf"];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a JPG, PNG, GIF, or PDF file",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Maximum file size is 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      await uploadNationalId(file);
+    }
+  };
+
   const handleSubmit = () => {
-    if (!selectedType || !documentUrl) return;
+    if (!selectedType || !documentPath) return;
     
     submitRequest.mutate({
       verificationType: selectedType,
-      documentUrl,
-      nationalIdUrl: nationalIdUrl || undefined,
+      documentUrl: documentPath,
+      nationalIdUrl: nationalIdPath || undefined,
       additionalNotes: additionalNotes || undefined,
     });
   };
@@ -347,36 +424,96 @@ export default function TutorVerification() {
               Apply for {selectedType === "school" ? "School Tutoring" : "Higher Ed/Professional"} Verification
             </DialogTitle>
             <DialogDescription>
-              Submit your documents for verification. Fee: KES {selectedType === "school" ? "500" : "300"}
+              Upload your documents for verification. Fee: KES {selectedType === "school" ? "500" : "300"}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="documentUrl">
-                {selectedType === "school" ? "Teaching Certificate/Degree URL" : "University Degree/Certification URL"} *
+              <Label>
+                {selectedType === "school" ? "Teaching Certificate/Degree" : "University Degree/Certification"} *
               </Label>
-              <Input
-                id="documentUrl"
-                placeholder="https://drive.google.com/file/..."
-                value={documentUrl}
-                onChange={(e) => setDocumentUrl(e.target.value)}
-                data-testid="input-document-url"
+              <input
+                ref={documentInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleDocumentSelect}
+                className="hidden"
               />
+              {documentPath ? (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600" />
+                  <span className="flex-1 text-sm text-green-800 truncate">{documentName}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => { setDocumentPath(""); setDocumentName(""); }}
+                    className="h-6 w-6"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => documentInputRef.current?.click()}
+                  disabled={isUploadingDocument}
+                  data-testid="button-upload-document"
+                >
+                  {isUploadingDocument ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 mr-2" />
+                  )}
+                  {isUploadingDocument ? "Uploading..." : "Upload Document (Photo or PDF)"}
+                </Button>
+              )}
               <p className="text-xs text-slate-500">
-                Upload your document to Google Drive, Dropbox, or similar and paste the shareable link here.
+                Upload a clear photo or PDF of your certificate/degree (max 10MB)
               </p>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="nationalIdUrl">National ID URL (Optional)</Label>
-              <Input
-                id="nationalIdUrl"
-                placeholder="https://drive.google.com/file/..."
-                value={nationalIdUrl}
-                onChange={(e) => setNationalIdUrl(e.target.value)}
-                data-testid="input-national-id-url"
+              <Label>National ID (Optional)</Label>
+              <input
+                ref={nationalIdInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleNationalIdSelect}
+                className="hidden"
               />
+              {nationalIdPath ? (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <Image className="w-5 h-5 text-green-600" />
+                  <span className="flex-1 text-sm text-green-800 truncate">{nationalIdName}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => { setNationalIdPath(""); setNationalIdName(""); }}
+                    className="h-6 w-6"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => nationalIdInputRef.current?.click()}
+                  disabled={isUploadingNationalId}
+                  data-testid="button-upload-national-id"
+                >
+                  {isUploadingNationalId ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 mr-2" />
+                  )}
+                  {isUploadingNationalId ? "Uploading..." : "Upload National ID (Optional)"}
+                </Button>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -391,9 +528,9 @@ export default function TutorVerification() {
               />
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800">
-                <strong>Note:</strong> Make sure your document links are publicly accessible or shared with view permissions.
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800">
+                <strong>Accepted formats:</strong> JPG, PNG, GIF, or PDF. Maximum file size: 10MB.
               </p>
             </div>
           </div>
@@ -404,7 +541,7 @@ export default function TutorVerification() {
             </Button>
             <Button 
               onClick={handleSubmit}
-              disabled={!documentUrl || submitRequest.isPending}
+              disabled={!documentPath || submitRequest.isPending || isUploadingDocument || isUploadingNationalId}
               data-testid="button-submit-verification"
             >
               {submitRequest.isPending ? (

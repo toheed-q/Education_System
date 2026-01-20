@@ -8,10 +8,77 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, XCircle, User, FileText, Eye, ExternalLink, School, GraduationCap, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, User, FileText, Eye, School, GraduationCap, Loader2, Download, Image, File } from "lucide-react";
 import { useState } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+function DocumentViewer({ url, label }: { url: string; label: string }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('application/pdf');
+  const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.startsWith('/objects/');
+  
+  const fullUrl = url.startsWith('/') ? url : `/${url}`;
+
+  return (
+    <>
+      <button
+        onClick={() => setShowPreview(true)}
+        className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors w-full text-left"
+        data-testid={`button-view-${label.toLowerCase().replace(/\s/g, '-')}`}
+      >
+        {isPdf ? <File className="w-5 h-5" /> : <Image className="w-5 h-5" />}
+        <span className="flex-1">{label}</span>
+        <Eye className="w-4 h-4" />
+      </button>
+
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {isPdf ? (
+              <div className="space-y-4">
+                <iframe 
+                  src={fullUrl} 
+                  className="w-full h-[70vh] border rounded"
+                  title={label}
+                />
+                <a 
+                  href={fullUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </a>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <img 
+                  src={fullUrl} 
+                  alt={label}
+                  className="max-w-full max-h-[70vh] mx-auto object-contain rounded border"
+                />
+                <a 
+                  href={fullUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+                >
+                  <Download className="w-4 h-4" />
+                  Open Full Size
+                </a>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export default function AdminVerifications() {
   const { user, isLoading: authLoading } = useAuth();
@@ -217,29 +284,11 @@ export default function AdminVerifications() {
                     </div>
                     
                     <div className="mt-4 pt-4 border-t border-slate-100">
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">Documents</h4>
-                      <div className="flex flex-wrap gap-2">
-                        <a 
-                          href={request.documentUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-md text-sm text-slate-700 transition-colors"
-                        >
-                          <FileText className="w-4 h-4" />
-                          Main Document
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                      <h4 className="text-sm font-medium text-slate-700 mb-2">Uploaded Documents</h4>
+                      <div className="grid md:grid-cols-2 gap-3">
+                        <DocumentViewer url={request.documentUrl} label="Main Document" />
                         {request.nationalIdUrl && (
-                          <a 
-                            href={request.nationalIdUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-md text-sm text-slate-700 transition-colors"
-                          >
-                            <User className="w-4 h-4" />
-                            National ID
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                          <DocumentViewer url={request.nationalIdUrl} label="National ID" />
                         )}
                       </div>
                       {request.additionalNotes && (
@@ -264,11 +313,11 @@ export default function AdminVerifications() {
       </div>
 
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Verification Request</DialogTitle>
             <DialogDescription>
-              Review the documents and decide whether to approve or reject this verification request.
+              Review the uploaded documents and decide whether to approve or reject this verification request.
             </DialogDescription>
           </DialogHeader>
           
@@ -285,29 +334,11 @@ export default function AdminVerifications() {
               </div>
               
               <div>
-                <h4 className="text-sm font-medium text-slate-700 mb-2">Documents</h4>
-                <div className="space-y-2">
-                  <a 
-                    href={selectedRequest.documentUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
-                  >
-                    <FileText className="w-5 h-5" />
-                    <span className="flex-1">View Main Document</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Uploaded Documents</h4>
+                <div className="space-y-3">
+                  <DocumentViewer url={selectedRequest.documentUrl} label="Main Document" />
                   {selectedRequest.nationalIdUrl && (
-                    <a 
-                      href={selectedRequest.nationalIdUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors"
-                    >
-                      <User className="w-5 h-5" />
-                      <span className="flex-1">View National ID</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                    <DocumentViewer url={selectedRequest.nationalIdUrl} label="National ID" />
                   )}
                 </div>
               </div>
