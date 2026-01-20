@@ -228,7 +228,142 @@ export async function registerRoutes(
     res.json(tutor);
   });
 
-  // Bookings
+  // Bookings - Initiate Payment (step 1 of booking flow)
+  app.post("/api/bookings/initiate-payment", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(500).json({ message: "Payment not configured" });
+    }
+    
+    try {
+      const { tutorId, startTime, endTime, amount } = req.body;
+      const user = req.user as any;
+      
+      // Calculate platform fee (25%)
+      const platformFeeKes = Math.round(amount * 0.25);
+      const tutorShareKes = amount - platformFeeKes;
+      
+      // Generate unique reference
+      const reference = `LRNT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Get user email for Paystack
+      const studentUser = await storage.getUser(user.id);
+      if (!studentUser) {
+        return res.status(400).json({ message: "User not found" });
+      }
+      
+      // Create payment intent in database
+      const intent = await storage.createPaymentIntent({
+        studentId: user.id,
+        tutorId,
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
+        amountKes: amount,
+        platformFeeKes,
+        tutorShareKes,
+        paystackReference: reference,
+      });
+      
+      // Initialize Paystack transaction
+      const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: studentUser.email,
+          amount: amount * 100, // Paystack uses kobo (cents)
+          currency: "KES",
+          reference,
+          callback_url: `${req.protocol}://${req.get('host')}/payment/callback`,
+          metadata: {
+            intentId: intent.id,
+            tutorId,
+            studentId: user.id,
+          },
+        }),
+      });
+      
+      const paystackData = await paystackResponse.json();
+      
+      if (!paystackData.status) {
+        return res.status(400).json({ message: paystackData.message || "Payment initialization failed" });
+      }
+      
+      res.json({
+        reference,
+        authorizationUrl: paystackData.data.authorization_url,
+        accessCode: paystackData.data.access_code,
+      });
+    } catch (err) {
+      console.error("Payment initiation error:", err);
+      res.status(500).json({ message: "Failed to initiate payment" });
+    }
+  });
+
+  // Verify Payment and Create Booking (step 2 of booking flow)
+  app.post("/api/bookings/verify-payment", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(500).json({ message: "Payment not configured" });
+    }
+    
+    try {
+      const { reference } = req.body;
+      
+      // Verify with Paystack
+      const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        headers: {
+          "Authorization": `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
+      });
+      
+      const verifyData = await verifyResponse.json();
+      
+      if (!verifyData.status || verifyData.data.status !== "success") {
+        return res.status(400).json({ message: "Payment verification failed" });
+      }
+      
+      // Get the payment intent
+      const intent = await storage.getPaymentIntent(reference);
+      if (!intent) {
+        return res.status(404).json({ message: "Payment intent not found" });
+      }
+      
+      if (intent.status === "paid") {
+        return res.status(400).json({ message: "Payment already processed" });
+      }
+      
+      // Mark intent as paid
+      await storage.markPaymentIntentPaid(reference);
+      
+      // Create the actual booking
+      const booking = await storage.createBookingFromPayment({
+        studentId: intent.studentId,
+        tutorId: intent.tutorId,
+        startTime: intent.startTime,
+        endTime: intent.endTime,
+        pricePaid: intent.amountKes,
+        paystackReference: reference,
+      });
+      
+      res.json({ 
+        success: true, 
+        booking,
+        message: "Payment verified and booking created" 
+      });
+    } catch (err) {
+      console.error("Payment verification error:", err);
+      res.status(500).json({ message: "Failed to verify payment" });
+    }
+  });
+
+  // Legacy direct booking (keep for now but should require payment)
   app.post(api.bookings.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {

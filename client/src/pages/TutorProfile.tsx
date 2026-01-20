@@ -1,9 +1,9 @@
 import { Navigation } from "@/components/Navigation";
-import { useTutor, useCreateBooking } from "@/hooks/use-tutors";
+import { useTutor } from "@/hooks/use-tutors";
 import { useRoute, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send } from "lucide-react";
+import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send, CreditCard } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
@@ -12,18 +12,34 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup: (options: {
+        key: string;
+        email: string;
+        amount: number;
+        currency: string;
+        ref: string;
+        callback: (response: { reference: string }) => void;
+        onClose: () => void;
+      }) => { openIframe: () => void };
+    };
+  }
+}
+
 export default function TutorProfile() {
   const [, params] = useRoute("/tutors/:id");
   const tutorId = parseInt(params?.id || "0");
   const { data: tutor, isLoading } = useTutor(tutorId);
   const { user } = useAuth();
   const { toast } = useToast();
-  const createBooking = useCreateBooking();
   const [bookingOpen, setBookingOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const sendMessage = useMutation({
     mutationFn: async (data: { receiverId: number; content: string }) => {
@@ -48,6 +64,37 @@ export default function TutorProfile() {
     },
   });
 
+  const initiatePayment = useMutation({
+    mutationFn: async (data: { tutorId: number; startTime: string; endTime: string; amount: number }) => {
+      const response = await apiRequest("POST", "/api/bookings/initiate-payment", data);
+      return response.json();
+    },
+  });
+
+  const verifyPayment = useMutation({
+    mutationFn: async (reference: string) => {
+      const response = await apiRequest("POST", "/api/bookings/verify-payment", { reference });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Booking Confirmed!",
+        description: "Your payment was successful. The tutor will see your booking request.",
+      });
+      setBookingOpen(false);
+      setSelectedDate("");
+      setSelectedTime("");
+    },
+    onError: () => {
+      toast({
+        title: "Payment Verification Failed",
+        description: "Please contact support if you were charged.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSendMessage = () => {
     if (!tutor || !messageContent.trim()) return;
     sendMessage.mutate({
@@ -57,31 +104,61 @@ export default function TutorProfile() {
   };
 
   const handleBookSession = async () => {
-    if (!tutor || !selectedDate || !selectedTime) return;
+    if (!tutor || !selectedDate || !selectedTime || !user) return;
     
     const startTime = new Date(`${selectedDate}T${selectedTime}:00`);
     const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour session
     
+    setIsProcessingPayment(true);
+    
     try {
-      await createBooking.mutateAsync({
+      // Step 1: Initialize payment with backend
+      const paymentData = await initiatePayment.mutateAsync({
         tutorId: tutor.user.id,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        pricePaid: tutor.hourlyRate,
+        amount: tutor.hourlyRate,
       });
       
-      toast({
-        title: "Booking Requested!",
-        description: "Your session has been requested. The tutor will confirm soon.",
+      // Step 2: Open Paystack popup
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      
+      if (!paystackPublicKey) {
+        toast({
+          title: "Payment Not Available",
+          description: "Payment integration is being set up. Please try again later.",
+          variant: "destructive",
+        });
+        setIsProcessingPayment(false);
+        return;
+      }
+      
+      const handler = window.PaystackPop.setup({
+        key: paystackPublicKey,
+        email: (user as any).email,
+        amount: tutor.hourlyRate * 100, // Paystack uses kobo/cents
+        currency: "KES",
+        ref: paymentData.reference,
+        callback: async (response) => {
+          // Step 3: Verify payment with backend
+          await verifyPayment.mutateAsync(response.reference);
+          setIsProcessingPayment(false);
+        },
+        onClose: () => {
+          setIsProcessingPayment(false);
+          toast({
+            title: "Payment Cancelled",
+            description: "You cancelled the payment process.",
+          });
+        },
       });
       
-      setBookingOpen(false);
-      setSelectedDate("");
-      setSelectedTime("");
-    } catch (error) {
+      handler.openIframe();
+    } catch (error: any) {
+      setIsProcessingPayment(false);
       toast({
-        title: "Booking Failed",
-        description: "Could not create booking. Please try again.",
+        title: "Payment Failed",
+        description: error.message || "Could not initiate payment. Please try again.",
         variant: "destructive",
       });
     }
@@ -146,7 +223,7 @@ export default function TutorProfile() {
               </p>
               
               <div className="flex flex-wrap gap-2 mb-6">
-                {tutor.subjects.map((subject: string, i: number) => (
+                {(tutor.subjects as string[]).map((subject: string, i: number) => (
                   <span 
                     key={i}
                     className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium"
@@ -181,7 +258,7 @@ export default function TutorProfile() {
                   <DialogHeader>
                     <DialogTitle>Book a Session with {tutor.user.name}</DialogTitle>
                     <DialogDescription>
-                      Select your preferred date and time for a tutoring session.
+                      Select your preferred date and time. Payment is required to confirm your booking.
                     </DialogDescription>
                   </DialogHeader>
                   
@@ -220,14 +297,15 @@ export default function TutorProfile() {
                       </div>
                     </div>
                     
-                    <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-600">Session Rate</span>
+                        <span className="text-slate-600">Session Rate (1 hour)</span>
                         <span className="font-bold text-slate-900">KES {tutor.hourlyRate.toLocaleString()}</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">
-                        Payment will be collected when the tutor confirms your session.
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <CreditCard className="w-4 h-4" />
+                        <span>Secure payment via Paystack</span>
+                      </div>
                     </div>
                   </div>
                   
@@ -235,17 +313,20 @@ export default function TutorProfile() {
                     {user ? (
                       <Button 
                         className="w-full"
-                        disabled={!selectedDate || !selectedTime || createBooking.isPending}
+                        disabled={!selectedDate || !selectedTime || isProcessingPayment || initiatePayment.isPending}
                         onClick={handleBookSession}
                         data-testid="button-confirm-booking"
                       >
-                        {createBooking.isPending ? (
+                        {isProcessingPayment || initiatePayment.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Requesting...
+                            Processing...
                           </>
                         ) : (
-                          "Request Session"
+                          <>
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Pay & Book Session
+                          </>
                         )}
                       </Button>
                     ) : (

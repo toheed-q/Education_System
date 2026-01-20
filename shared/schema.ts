@@ -6,6 +6,7 @@ import { z } from "zod";
 export const userRoleEnum = pgEnum("user_role", ["super_admin", "admin", "student", "tutor"]);
 export const contentTypeEnum = pgEnum("content_type", ["video", "reading", "file", "link"]);
 export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "completed", "cancelled"]);
+export const paymentIntentStatusEnum = pgEnum("payment_intent_status", ["initiated", "paid", "failed", "expired"]);
 export const verificationStatusEnum = pgEnum("verification_status", ["pending", "approved", "rejected"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "rejected"]);
 
@@ -124,6 +125,21 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").default("pending"),
   pricePaid: integer("price_paid_kes").notNull(),
   meetingLink: text("meeting_link"),
+  paystackReference: text("paystack_reference"),
+});
+
+export const bookingPaymentIntents = pgTable("booking_payment_intents", {
+  id: serial("id").primaryKey(),
+  studentId: integer("student_id").notNull().references(() => users.id),
+  tutorId: integer("tutor_id").notNull().references(() => users.id),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  amountKes: integer("amount_kes").notNull(),
+  platformFeeKes: integer("platform_fee_kes").notNull(), // 25% platform fee
+  tutorShareKes: integer("tutor_share_kes").notNull(), // 75% for tutor
+  paystackReference: text("paystack_reference").notNull().unique(),
+  status: paymentIntentStatusEnum("status").default("initiated"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const reviews = pgTable("reviews", {
@@ -205,7 +221,13 @@ export const insertTutorProfileSchema = createInsertSchema(tutorProfiles).omit({
 export const insertBookingSchema = createInsertSchema(bookings, {
   startTime: z.coerce.date(),
   endTime: z.coerce.date(),
-}).omit({ id: true, studentId: true, status: true, meetingLink: true });
+}).omit({ id: true, studentId: true, status: true, meetingLink: true, paystackReference: true });
+
+export const insertPaymentIntentSchema = createInsertSchema(bookingPaymentIntents, {
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
+}).omit({ id: true, createdAt: true, status: true });
+
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, read: true, sentAt: true });
 
@@ -222,6 +244,8 @@ export type QuizAttempt = typeof quizAttempts.$inferSelect;
 export type InsertQuizAttempt = z.infer<typeof insertQuizAttemptSchema>;
 export type TutorProfile = typeof tutorProfiles.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
+export type BookingPaymentIntent = typeof bookingPaymentIntents.$inferSelect;
+export type InsertPaymentIntent = z.infer<typeof insertPaymentIntentSchema>;
 export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 

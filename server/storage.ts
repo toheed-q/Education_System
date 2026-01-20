@@ -2,10 +2,11 @@ import { db } from "./db";
 import {
   users, programs, courses, courseWeeks, courseContent, quizzes, quizQuestions, quizAttempts,
   tutorProfiles, bookings, reviews, messages, enrollments, certificates, verificationRequests, withdrawals,
+  bookingPaymentIntents,
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
-  type InsertQuizAttempt
+  type InsertQuizAttempt, type BookingPaymentIntent
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -41,7 +42,13 @@ export interface IStorage {
 
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
+  createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; pricePaid: number; paystackReference: string }): Promise<Booking>;
   getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]>;
+  
+  // Payment Intents
+  createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent>;
+  getPaymentIntent(paystackReference: string): Promise<BookingPaymentIntent | undefined>;
+  markPaymentIntentPaid(paystackReference: string): Promise<BookingPaymentIntent | undefined>;
   
   // Messages
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
@@ -176,6 +183,36 @@ export class DatabaseStorage implements IStorage {
   async createBooking(booking: InsertBooking): Promise<Booking> {
     const [newBooking] = await db.insert(bookings).values(booking).returning();
     return newBooking;
+  }
+
+  async createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; pricePaid: number; paystackReference: string }): Promise<Booking> {
+    const [newBooking] = await db.insert(bookings).values({
+      studentId: data.studentId,
+      tutorId: data.tutorId,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      pricePaid: data.pricePaid,
+      paystackReference: data.paystackReference,
+    }).returning();
+    return newBooking;
+  }
+
+  async createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent> {
+    const [newIntent] = await db.insert(bookingPaymentIntents).values(intent).returning();
+    return newIntent;
+  }
+
+  async getPaymentIntent(paystackReference: string): Promise<BookingPaymentIntent | undefined> {
+    const [intent] = await db.select().from(bookingPaymentIntents).where(eq(bookingPaymentIntents.paystackReference, paystackReference));
+    return intent;
+  }
+
+  async markPaymentIntentPaid(paystackReference: string): Promise<BookingPaymentIntent | undefined> {
+    const [updated] = await db.update(bookingPaymentIntents)
+      .set({ status: "paid" })
+      .where(eq(bookingPaymentIntents.paystackReference, paystackReference))
+      .returning();
+    return updated;
   }
 
   async getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]> {
