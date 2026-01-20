@@ -386,6 +386,37 @@ export async function registerRoutes(
     res.json(bookings);
   });
 
+  // Update booking status (accept/decline)
+  app.patch("/api/bookings/:id/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const bookingId = Number(req.params.id);
+    const { status } = req.body;
+    const user = req.user as any;
+    
+    if (!["confirmed", "cancelled"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Use 'confirmed' or 'cancelled'" });
+    }
+    
+    try {
+      // Only tutors can accept/decline their own bookings
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      if (booking.tutorId !== user.id) {
+        return res.status(403).json({ message: "You can only manage your own bookings" });
+      }
+      
+      const updated = await storage.updateBookingStatus(bookingId, status);
+      res.json(updated);
+    } catch (err) {
+      console.error("Booking status update error:", err);
+      res.status(500).json({ message: "Failed to update booking status" });
+    }
+  });
+
   // Messages
   app.get(api.messages.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);

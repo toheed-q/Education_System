@@ -235,7 +235,9 @@ export const insertMessageSchema = createInsertSchema(messages).omit({ id: true,
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Program = typeof programs.$inferSelect;
+export type InsertProgram = z.infer<typeof insertProgramSchema>;
 export type Course = typeof courses.$inferSelect;
+export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type CourseWeek = typeof courseWeeks.$inferSelect;
 export type CourseContent = typeof courseContent.$inferSelect;
 export type Quiz = typeof quizzes.$inferSelect;
@@ -243,11 +245,14 @@ export type QuizQuestion = typeof quizQuestions.$inferSelect;
 export type QuizAttempt = typeof quizAttempts.$inferSelect;
 export type InsertQuizAttempt = z.infer<typeof insertQuizAttemptSchema>;
 export type TutorProfile = typeof tutorProfiles.$inferSelect;
+export type InsertTutorProfile = z.infer<typeof insertTutorProfileSchema>;
 export type Booking = typeof bookings.$inferSelect;
+export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type BookingPaymentIntent = typeof bookingPaymentIntents.$inferSelect;
 export type InsertPaymentIntent = z.infer<typeof insertPaymentIntentSchema>;
 export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 // Request/Response Types
 export type LoginRequest = z.infer<typeof insertUserSchema>; // simplified

@@ -1,20 +1,45 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, User, Check, X } from "lucide-react";
-import { Loader2 } from "lucide-react";
+import { Calendar, Clock, User, Check, X, Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function TutorSchedule() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: bookings, isLoading } = useQuery({
     queryKey: ["/api/bookings"],
     enabled: !!user,
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ bookingId, status }: { bookingId: number; status: string }) => {
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}/status`, { status });
+      return response.json();
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: status === "confirmed" ? "Booking Accepted!" : "Booking Declined",
+        description: status === "confirmed" 
+          ? "The student has been notified. Get ready for your session!" 
+          : "The booking has been declined.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to update booking",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
   });
 
   if (authLoading) {
@@ -35,6 +60,14 @@ export default function TutorSchedule() {
   const confirmedBookings = allBookings.filter(b => 
     b.status === 'confirmed' && new Date(b.startTime) > new Date()
   );
+
+  const handleAccept = (bookingId: number) => {
+    updateStatus.mutate({ bookingId, status: "confirmed" });
+  };
+
+  const handleDecline = (bookingId: number) => {
+    updateStatus.mutate({ bookingId, status: "cancelled" });
+  };
 
   return (
     <DashboardLayout>
@@ -79,15 +112,41 @@ export default function TutorSchedule() {
                               </span>
                             </div>
                           </div>
-                          <p className="font-bold text-slate-900">KES {booking.price?.toLocaleString()}</p>
+                          <p className="font-bold text-slate-900">
+                            KES {(booking.pricePaid || booking.price)?.toLocaleString()}
+                          </p>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="default" data-testid={`button-accept-${booking.id}`}>
-                              <Check className="w-4 h-4 mr-1" />
-                              Accept
+                            <Button 
+                              size="sm" 
+                              variant="default" 
+                              onClick={() => handleAccept(booking.id)}
+                              disabled={updateStatus.isPending}
+                              data-testid={`button-accept-${booking.id}`}
+                            >
+                              {updateStatus.isPending ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Check className="w-4 h-4 mr-1" />
+                                  Accept
+                                </>
+                              )}
                             </Button>
-                            <Button size="sm" variant="outline" data-testid={`button-decline-${booking.id}`}>
-                              <X className="w-4 h-4 mr-1" />
-                              Decline
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => handleDecline(booking.id)}
+                              disabled={updateStatus.isPending}
+                              data-testid={`button-decline-${booking.id}`}
+                            >
+                              {updateStatus.isPending ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <X className="w-4 h-4 mr-1" />
+                                  Decline
+                                </>
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -124,7 +183,9 @@ export default function TutorSchedule() {
                               </span>
                             </div>
                           </div>
-                          <p className="font-bold text-slate-900">KES {booking.price?.toLocaleString()}</p>
+                          <p className="font-bold text-slate-900">
+                            KES {(booking.pricePaid || booking.price)?.toLocaleString()}
+                          </p>
                           <Badge variant="default">Confirmed</Badge>
                         </div>
                       </CardContent>

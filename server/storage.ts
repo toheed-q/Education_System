@@ -44,6 +44,8 @@ export interface IStorage {
   createBooking(booking: InsertBooking): Promise<Booking>;
   createBookingFromPayment(data: { studentId: number; tutorId: number; startTime: Date; endTime: Date; pricePaid: number; paystackReference: string }): Promise<Booking>;
   getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]>;
+  getBooking(id: number): Promise<Booking | undefined>;
+  updateBookingStatus(id: number, status: "pending" | "confirmed" | "completed" | "cancelled"): Promise<Booking | undefined>;
   
   // Payment Intents
   createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string }): Promise<BookingPaymentIntent>;
@@ -211,6 +213,19 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(bookingPaymentIntents)
       .set({ status: "paid" })
       .where(eq(bookingPaymentIntents.paystackReference, paystackReference))
+      .returning();
+    return updated;
+  }
+
+  async getBooking(id: number): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    return booking;
+  }
+
+  async updateBookingStatus(id: number, status: "pending" | "confirmed" | "completed" | "cancelled"): Promise<Booking | undefined> {
+    const [updated] = await db.update(bookings)
+      .set({ status })
+      .where(eq(bookings.id, id))
       .returning();
     return updated;
   }
