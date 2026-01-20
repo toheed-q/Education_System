@@ -118,9 +118,58 @@ export async function registerRoutes(
     res.json({ ...program, courses: programCourses }); 
   });
 
+  app.post(api.programs.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    try {
+      const input = api.programs.create.input.parse(req.body);
+      const program = await storage.createProgram({
+        title: input.title,
+        description: input.description,
+        price: input.price,
+        published: input.published ?? false,
+      });
+      res.status(201).json(program);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to create program" });
+      }
+    }
+  });
+
   app.get(api.courses.list.path, async (req, res) => {
     const courses = await storage.getCourses();
     res.json(courses);
+  });
+
+  app.post(api.courses.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    try {
+      const input = api.courses.create.input.parse(req.body);
+      const course = await storage.createCourse({
+        title: input.title,
+        description: input.description,
+        price: input.price,
+        programId: input.programId ?? undefined,
+        published: input.published ?? false,
+      });
+      res.status(201).json(course);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to create course" });
+      }
+    }
   });
 
   app.get(api.courses.get.path, async (req, res) => {

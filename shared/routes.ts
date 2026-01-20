@@ -91,6 +91,16 @@ export const api = {
         404: errorSchemas.notFound,
       },
     },
+    create: {
+      method: 'POST' as const,
+      path: '/api/programs',
+      input: insertProgramSchema,
+      responses: {
+        201: z.custom<typeof programs.$inferSelect>(),
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
+      },
+    },
   },
   courses: {
     list: {
@@ -112,6 +122,16 @@ export const api = {
           })[] 
         }>(),
         404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/courses',
+      input: insertCourseSchema,
+      responses: {
+        201: z.custom<typeof courses.$inferSelect>(),
+        400: errorSchemas.validation,
+        401: errorSchemas.unauthorized,
       },
     },
   },

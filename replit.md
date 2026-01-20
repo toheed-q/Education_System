@@ -109,6 +109,12 @@ Preferred communication style: Simple, everyday language.
 - `POST /api/quizzes/:id/submit` - Submit quiz answers and calculate score
 - Booking schema updated to coerce ISO date strings to Date objects
 
+### Admin Course/Program Management
+- **Add Course Form** (`AdminCourses.tsx`): Dialog form with title, description, price (KES), optional program selection, and publish toggle
+- **Add Program Form** (`AdminPrograms.tsx`): Dialog form with title, description, price (KES), and publish toggle
+- **API Endpoints**: POST /api/courses and POST /api/programs (admin/super_admin only)
+- **Search/Filter**: Both pages have working search functionality
+
 ### Test Accounts (password: password123)
 - `student@lernentech.com` - Student role
 - `tutor@lernentech.com` - Tutor role
