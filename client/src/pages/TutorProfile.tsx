@@ -2,12 +2,15 @@ import { Navigation } from "@/components/Navigation";
 import { useTutor, useCreateBooking } from "@/hooks/use-tutors";
 import { useRoute, Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, MapPin, CheckCircle, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send } from "lucide-react";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function TutorProfile() {
   const [, params] = useRoute("/tutors/:id");
@@ -17,8 +20,41 @@ export default function TutorProfile() {
   const { toast } = useToast();
   const createBooking = useCreateBooking();
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
+  const [messageContent, setMessageContent] = useState("");
+
+  const sendMessage = useMutation({
+    mutationFn: async (data: { receiverId: number; content: string }) => {
+      const response = await apiRequest("POST", "/api/messages", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      toast({
+        title: "Message Sent!",
+        description: "Your message has been sent to the tutor.",
+      });
+      setMessageOpen(false);
+      setMessageContent("");
+    },
+    onError: () => {
+      toast({
+        title: "Failed to send message",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSendMessage = () => {
+    if (!tutor || !messageContent.trim()) return;
+    sendMessage.mutate({
+      receiverId: tutor.user.id,
+      content: messageContent.trim(),
+    });
+  };
 
   const handleBookSession = async () => {
     if (!tutor || !selectedDate || !selectedTime) return;
@@ -144,6 +180,9 @@ export default function TutorProfile() {
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>Book a Session with {tutor.user.name}</DialogTitle>
+                    <DialogDescription>
+                      Select your preferred date and time for a tutoring session.
+                    </DialogDescription>
                   </DialogHeader>
                   
                   <div className="py-4 space-y-4">
@@ -186,6 +225,9 @@ export default function TutorProfile() {
                         <span className="text-slate-600">Session Rate</span>
                         <span className="font-bold text-slate-900">KES {tutor.hourlyRate.toLocaleString()}</span>
                       </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Payment will be collected when the tutor confirms your session.
+                      </p>
                     </div>
                   </div>
                   
@@ -200,10 +242,10 @@ export default function TutorProfile() {
                         {createBooking.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Booking...
+                            Requesting...
                           </>
                         ) : (
-                          "Book Session"
+                          "Request Session"
                         )}
                       </Button>
                     ) : (
@@ -218,10 +260,72 @@ export default function TutorProfile() {
                 </DialogContent>
               </Dialog>
               
-              <Button variant="outline" size="lg" className="w-full md:w-auto" data-testid="button-message">
-                <MessageCircle className="w-5 h-5 mr-2" />
-                Send Message
-              </Button>
+              <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="lg" className="w-full md:w-auto" data-testid="button-message">
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    Send Message
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Message {tutor.user.name}</DialogTitle>
+                    <DialogDescription>
+                      Send a message to the tutor. They typically respond within an hour.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="py-4">
+                    {user ? (
+                      <div className="space-y-4">
+                        <Textarea
+                          placeholder="Hi! I'm interested in your tutoring services..."
+                          value={messageContent}
+                          onChange={(e) => setMessageContent(e.target.value)}
+                          className="min-h-[120px] resize-none"
+                          data-testid="textarea-message"
+                        />
+                        <p className="text-xs text-slate-500">
+                          You can discuss your learning goals, ask about availability, or inquire about their teaching approach.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <MessageCircle className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                        <p className="text-slate-500 mb-4">Please log in to send a message</p>
+                        <Link href="/login">
+                          <Button>Log In</Button>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {user && (
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setMessageOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        disabled={!messageContent.trim() || sendMessage.isPending}
+                        onClick={handleSendMessage}
+                        data-testid="button-send-message"
+                      >
+                        {sendMessage.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Send Message
+                          </>
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  )}
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>

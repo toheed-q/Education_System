@@ -185,7 +185,7 @@ export const api = {
     send: {
       method: 'POST' as const,
       path: '/api/messages',
-      input: insertMessageSchema,
+      input: insertMessageSchema.omit({ senderId: true }),
       responses: {
         201: z.custom<typeof messages.$inferSelect>(),
       },
