@@ -444,6 +444,129 @@ export async function registerRoutes(
     }
   });
 
+  // Verification Requests
+  app.post("/api/verification-requests", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (user.role !== "tutor") {
+      return res.status(403).json({ message: "Only tutors can submit verification requests" });
+    }
+    
+    try {
+      const { verificationType, documentUrl, nationalIdUrl, additionalNotes } = req.body;
+      
+      if (!["school", "higher_ed"].includes(verificationType)) {
+        return res.status(400).json({ message: "Invalid verification type" });
+      }
+      
+      if (!documentUrl) {
+        return res.status(400).json({ message: "Document URL is required" });
+      }
+      
+      // Get tutor profile
+      const tutorProfile = await storage.getTutorProfileByUserId(user.id);
+      if (!tutorProfile) {
+        return res.status(404).json({ message: "Tutor profile not found" });
+      }
+      
+      // Calculate fee based on type
+      const feeAmountKes = verificationType === "school" ? 500 : 300;
+      
+      const request = await storage.createVerificationRequest({
+        tutorProfileId: tutorProfile.id,
+        verificationType,
+        documentUrl,
+        nationalIdUrl,
+        additionalNotes,
+        feeAmountKes,
+      });
+      
+      // Reset tutor profile verification status to pending when submitting a new request
+      await storage.updateTutorVerificationStatus(tutorProfile.id, "pending");
+      
+      res.status(201).json(request);
+    } catch (err) {
+      console.error("Verification request error:", err);
+      res.status(500).json({ message: "Failed to submit verification request" });
+    }
+  });
+
+  app.get("/api/verification-requests/my", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (user.role !== "tutor") {
+      return res.status(403).json({ message: "Only tutors can view their verification requests" });
+    }
+    
+    try {
+      const tutorProfile = await storage.getTutorProfileByUserId(user.id);
+      if (!tutorProfile) {
+        return res.json([]);
+      }
+      
+      const requests = await storage.getVerificationRequestsByTutor(tutorProfile.id);
+      res.json(requests);
+    } catch (err) {
+      console.error("Get verification requests error:", err);
+      res.status(500).json({ message: "Failed to get verification requests" });
+    }
+  });
+
+  app.get("/api/admin/verification-requests", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (!["admin", "super_admin"].includes(user.role)) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    try {
+      const requests = await storage.getPendingVerificationRequests();
+      res.json(requests);
+    } catch (err) {
+      console.error("Get pending verification requests error:", err);
+      res.status(500).json({ message: "Failed to get verification requests" });
+    }
+  });
+
+  app.patch("/api/admin/verification-requests/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (!["admin", "super_admin"].includes(user.role)) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    
+    const requestId = Number(req.params.id);
+    const { status, reviewNotes } = req.body;
+    
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Use 'approved' or 'rejected'" });
+    }
+    
+    try {
+      const updated = await storage.updateVerificationRequestStatus(requestId, status, user.id, reviewNotes);
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Verification request not found" });
+      }
+      
+      // Update tutor profile verification status based on decision
+      if (status === "approved") {
+        await storage.updateTutorVerificationStatus(updated.tutorProfileId, "approved");
+      } else if (status === "rejected") {
+        await storage.updateTutorVerificationStatus(updated.tutorProfileId, "rejected");
+      }
+      
+      res.json(updated);
+    } catch (err) {
+      console.error("Update verification request error:", err);
+      res.status(500).json({ message: "Failed to update verification request" });
+    }
+  });
+
   // Messages
   app.get(api.messages.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);

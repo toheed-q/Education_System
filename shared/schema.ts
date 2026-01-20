@@ -159,12 +159,22 @@ export const messages = pgTable("messages", {
   sentAt: timestamp("sent_at").defaultNow(),
 });
 
+export const verificationTypeEnum = pgEnum("verification_type", ["school", "higher_ed"]);
+
 export const verificationRequests = pgTable("verification_requests", {
   id: serial("id").primaryKey(),
   tutorProfileId: integer("tutor_profile_id").notNull().references(() => tutorProfiles.id),
+  verificationType: verificationTypeEnum("verification_type").notNull(),
   documentUrl: text("document_url").notNull(),
+  nationalIdUrl: text("national_id_url"),
+  additionalNotes: text("additional_notes"),
+  feeAmountKes: integer("fee_amount_kes").notNull(),
+  paymentReference: text("payment_reference"),
   status: verificationStatusEnum("status").default("pending"),
+  reviewNotes: text("review_notes"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
   submittedAt: timestamp("submitted_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
 });
 
 export const withdrawals = pgTable("withdrawals", {
@@ -253,6 +263,7 @@ export type InsertPaymentIntent = z.infer<typeof insertPaymentIntentSchema>;
 export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type VerificationRequest = typeof verificationRequests.$inferSelect;
 
 // Request/Response Types
 export type LoginRequest = z.infer<typeof insertUserSchema>; // simplified

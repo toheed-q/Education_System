@@ -6,7 +6,7 @@ import {
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
-  type InsertQuizAttempt, type BookingPaymentIntent
+  type InsertQuizAttempt, type BookingPaymentIntent, type VerificationRequest
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -64,6 +64,14 @@ export interface IStorage {
   getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
   createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt>;
   getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]>;
+
+  // Verification Requests
+  createVerificationRequest(request: { tutorProfileId: number; verificationType: "school" | "higher_ed"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest>;
+  getVerificationRequestsByTutor(tutorProfileId: number): Promise<VerificationRequest[]>;
+  getPendingVerificationRequests(): Promise<(VerificationRequest & { tutorProfile: TutorProfile & { user: User } })[]>;
+  updateVerificationRequestStatus(id: number, status: "pending" | "approved" | "rejected", reviewedBy: number, reviewNotes?: string): Promise<VerificationRequest | undefined>;
+  getTutorProfileByUserId(userId: number): Promise<TutorProfile | undefined>;
+  updateTutorVerificationStatus(tutorProfileId: number, status: "pending" | "approved" | "rejected"): Promise<TutorProfile | undefined>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -296,6 +304,52 @@ export class DatabaseStorage implements IStorage {
   async getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]> {
     return await db.select().from(quizAttempts)
       .where(and(eq(quizAttempts.userId, userId), eq(quizAttempts.passed, true)));
+  }
+
+  async createVerificationRequest(request: { tutorProfileId: number; verificationType: "school" | "higher_ed"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest> {
+    const [newRequest] = await db.insert(verificationRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async getVerificationRequestsByTutor(tutorProfileId: number): Promise<VerificationRequest[]> {
+    return await db.select().from(verificationRequests)
+      .where(eq(verificationRequests.tutorProfileId, tutorProfileId))
+      .orderBy(desc(verificationRequests.submittedAt));
+  }
+
+  async getPendingVerificationRequests(): Promise<(VerificationRequest & { tutorProfile: TutorProfile & { user: User } })[]> {
+    const results = await db.select()
+      .from(verificationRequests)
+      .innerJoin(tutorProfiles, eq(verificationRequests.tutorProfileId, tutorProfiles.id))
+      .innerJoin(users, eq(tutorProfiles.userId, users.id))
+      .where(eq(verificationRequests.status, "pending"))
+      .orderBy(desc(verificationRequests.submittedAt));
+    
+    return results.map(r => ({
+      ...r.verification_requests,
+      tutorProfile: { ...r.tutor_profiles, user: r.users }
+    }));
+  }
+
+  async updateVerificationRequestStatus(id: number, status: "pending" | "approved" | "rejected", reviewedBy: number, reviewNotes?: string): Promise<VerificationRequest | undefined> {
+    const [updated] = await db.update(verificationRequests)
+      .set({ status, reviewedBy, reviewNotes, reviewedAt: new Date() })
+      .where(eq(verificationRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getTutorProfileByUserId(userId: number): Promise<TutorProfile | undefined> {
+    const [profile] = await db.select().from(tutorProfiles).where(eq(tutorProfiles.userId, userId));
+    return profile;
+  }
+
+  async updateTutorVerificationStatus(tutorProfileId: number, status: "pending" | "approved" | "rejected"): Promise<TutorProfile | undefined> {
+    const [updated] = await db.update(tutorProfiles)
+      .set({ verificationStatus: status })
+      .where(eq(tutorProfiles.id, tutorProfileId))
+      .returning();
+    return updated;
   }
 
   async countUsers(): Promise<number> {
