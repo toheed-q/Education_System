@@ -10,6 +10,7 @@ import argon2 from "argon2";
 import { users } from "@shared/schema";
 import { generateSlug } from "@shared/utils";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import OpenAI from "openai";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -277,6 +278,69 @@ export async function registerRoutes(
     const isEnrolled = userId ? await storage.getEnrollmentForUser(userId, undefined, program.id) : null;
     
     res.json({ ...program, courses: programCourses, isEnrolled: !!isEnrolled });
+  });
+
+  // AI Description Generation
+  app.post("/api/ai/generate-description", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (user.role !== "admin" && user.role !== "super_admin") {
+      return res.status(403).json({ message: "Only admins can generate descriptions" });
+    }
+    
+    try {
+      const { title, type, tone } = req.body;
+      
+      if (!title || typeof title !== "string" || title.trim().length < 2) {
+        return res.status(400).json({ message: "Title is required (at least 2 characters)" });
+      }
+      
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      
+      const contentType = type === "course" ? "course" : "program";
+      const toneInstruction = tone && typeof tone === "string" && tone.trim() 
+        ? `Use this tone and style: ${tone.trim()}`
+        : "Use a professional, engaging, and informative tone";
+      
+      const completion = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert education content writer for LernenTech, an e-learning platform in Kenya. Generate compelling descriptions for learning ${contentType}s. ${toneInstruction}. 
+            
+Keep the description:
+- Between 2-4 sentences
+- Focused on what learners will gain
+- Clear about practical outcomes and skills
+- Engaging but professional
+- Do not use emojis
+
+Only respond with the description text, nothing else.`
+          },
+          {
+            role: "user",
+            content: `Generate a description for a ${contentType} titled: "${title.trim()}"`
+          }
+        ],
+        max_completion_tokens: 200,
+      });
+      
+      const description = completion.choices[0]?.message?.content?.trim();
+      
+      if (!description) {
+        return res.status(500).json({ message: "Failed to generate description" });
+      }
+      
+      res.json({ description });
+    } catch (error: any) {
+      console.error("AI description generation error:", error);
+      res.status(500).json({ message: error.message || "Failed to generate description" });
+    }
   });
 
   // Enrollments

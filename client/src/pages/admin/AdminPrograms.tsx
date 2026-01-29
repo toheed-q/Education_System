@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { GraduationCap, Search, Plus, Edit, Eye, Loader2 } from "lucide-react";
+import { GraduationCap, Search, Plus, Edit, Eye, Loader2, Sparkles } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
@@ -32,6 +32,7 @@ export default function AdminPrograms() {
   const [, setLocation] = useLocation();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [aiTone, setAiTone] = useState("");
   const { toast } = useToast();
 
   const form = useForm<ProgramFormValues>({
@@ -43,6 +44,46 @@ export default function AdminPrograms() {
       published: false,
     },
   });
+
+  const generateDescriptionMutation = useMutation({
+    mutationFn: async ({ title, tone }: { title: string; tone?: string }) => {
+      const response = await apiRequest("POST", "/api/ai/generate-description", {
+        title,
+        type: "program",
+        tone,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.description) {
+        form.setValue("description", data.description);
+        toast({
+          title: "Description Generated",
+          description: "AI has created a description for your program.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Generation Failed",
+        description: error.message || "Could not generate description",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerateDescription = () => {
+    const title = form.getValues("title");
+    if (!title || title.length < 3) {
+      toast({
+        title: "Title Required",
+        description: "Please enter a program title first (at least 3 characters)",
+        variant: "destructive",
+      });
+      return;
+    }
+    generateDescriptionMutation.mutate({ title, tone: aiTone || undefined });
+  };
 
   const { data: programs, isLoading } = useQuery({
     queryKey: ["/api/programs"],
@@ -135,15 +176,44 @@ export default function AdminPrograms() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description</FormLabel>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Description</FormLabel>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleGenerateDescription}
+                            disabled={generateDescriptionMutation.isPending}
+                            data-testid="button-generate-description"
+                          >
+                            {generateDescriptionMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3 h-3 mr-1" />
+                            )}
+                            Generate with AI
+                          </Button>
+                        </div>
                         <FormControl>
                           <Textarea 
                             placeholder="Describe what this program offers and what students will learn..." 
-                            className="resize-none"
+                            className="resize-none min-h-[100px]"
                             data-testid="input-program-description"
                             {...field} 
                           />
                         </FormControl>
+                        <div className="space-y-1">
+                          <Input
+                            placeholder="Optional: Tell AI how to phrase it (e.g., 'formal', 'friendly and exciting', 'brief')"
+                            value={aiTone}
+                            onChange={(e) => setAiTone(e.target.value)}
+                            className="text-sm"
+                            data-testid="input-ai-tone"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Enter a title above, then click "Generate with AI" to create a description
+                          </p>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}

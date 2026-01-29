@@ -227,8 +227,8 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
 
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, isVerified: true });
-export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, createdAt: true });
-export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true });
+export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, createdAt: true, slug: true });
+export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true, slug: true });
 export const insertWeekSchema = createInsertSchema(courseWeeks).omit({ id: true });
 export const insertContentSchema = createInsertSchema(courseContent).omit({ id: true });
 export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true });
