@@ -7,19 +7,81 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, Shield, GraduationCap, School, Upload, Loader2, Clock, XCircle, FileText, X, Image } from "lucide-react";
+import { CheckCircle, Shield, GraduationCap, School, Upload, Loader2, Clock, XCircle, FileText, X, Briefcase, AlertCircle } from "lucide-react";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
+import type { TutorProfile, VerificationRequest } from "@shared/schema";
+
+type SuperCategory = "school_tutoring" | "higher_education" | "professional_skills";
+type VerificationStatus = "pending" | "approved" | "rejected" | "not_applied";
+
+const CATEGORY_CONFIG: Record<SuperCategory, {
+  title: string;
+  description: string;
+  fee: number;
+  icon: typeof School;
+  iconBg: string;
+  iconColor: string;
+  documentLabel: string;
+  requirements: string[];
+  visibility: string;
+}> = {
+  school_tutoring: {
+    title: "School Tutoring",
+    description: "Primary and secondary school subjects (KCPE/KCSE)",
+    fee: 500,
+    icon: School,
+    iconBg: "bg-blue-100",
+    iconColor: "text-blue-600",
+    documentLabel: "TSC Certificate / Teaching Qualification",
+    requirements: [
+      "TSC certificate or teaching qualification",
+      "National ID verification",
+      "Must be verified to be visible"
+    ],
+    visibility: "Must be verified before students can see you"
+  },
+  higher_education: {
+    title: "Higher Education",
+    description: "University and college-level subjects",
+    fee: 300,
+    icon: GraduationCap,
+    iconBg: "bg-purple-100",
+    iconColor: "text-purple-600",
+    documentLabel: "University Degree / Academic Transcript",
+    requirements: [
+      "University degree or academic transcript",
+      "Professional certification (if applicable)",
+      "Visible while verification is pending"
+    ],
+    visibility: "Can be visible while verification is pending"
+  },
+  professional_skills: {
+    title: "Professional Skills",
+    description: "Languages, music, art, business skills, etc.",
+    fee: 300,
+    icon: Briefcase,
+    iconBg: "bg-green-100",
+    iconColor: "text-green-600",
+    documentLabel: "Professional Certification / Portfolio",
+    requirements: [
+      "Professional certification or portfolio",
+      "Proof of expertise/experience",
+      "Visible while verification is pending"
+    ],
+    visibility: "Can be visible while verification is pending"
+  }
+};
 
 export default function TutorVerification() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<"school" | "higher_ed" | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<SuperCategory | null>(null);
   const [documentPath, setDocumentPath] = useState("");
   const [documentName, setDocumentName] = useState("");
   const [nationalIdPath, setNationalIdPath] = useState("");
@@ -51,7 +113,12 @@ export default function TutorVerification() {
     },
   });
 
-  const { data: myRequests, isLoading: requestsLoading } = useQuery({
+  const { data: tutorProfile } = useQuery<TutorProfile>({
+    queryKey: ["/api/tutors/my-profile"],
+    enabled: !!user && user.role === "tutor",
+  });
+
+  const { data: myRequests, isLoading: requestsLoading } = useQuery<VerificationRequest[]>({
     queryKey: ["/api/verification-requests/my"],
     enabled: !!user && user.role === "tutor",
   });
@@ -63,6 +130,7 @@ export default function TutorVerification() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/verification-requests/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutors/my-profile"] });
       toast({
         title: "Verification Request Submitted!",
         description: "Your verification request has been submitted for review.",
@@ -85,11 +153,11 @@ export default function TutorVerification() {
     setNationalIdPath("");
     setNationalIdName("");
     setAdditionalNotes("");
-    setSelectedType(null);
+    setSelectedCategory(null);
   };
 
-  const handleApply = (type: "school" | "higher_ed") => {
-    setSelectedType(type);
+  const handleApply = (category: SuperCategory) => {
+    setSelectedCategory(category);
     setDialogOpen(true);
   };
 
@@ -142,10 +210,10 @@ export default function TutorVerification() {
   };
 
   const handleSubmit = () => {
-    if (!selectedType || !documentPath) return;
+    if (!selectedCategory || !documentPath) return;
     
     submitRequest.mutate({
-      verificationType: selectedType,
+      verificationType: selectedCategory,
       documentUrl: documentPath,
       nationalIdUrl: nationalIdPath || undefined,
       additionalNotes: additionalNotes || undefined,
@@ -165,206 +233,166 @@ export default function TutorVerification() {
     return null;
   }
 
-  const requests = (myRequests as any[]) || [];
-  const pendingRequest = requests.find(r => r.status === "pending");
-  const approvedRequest = requests.find(r => r.status === "approved");
-  const rejectedRequest = requests.find(r => r.status === "rejected");
+  const requests = myRequests || [];
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending Review</Badge>;
-      case "approved":
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Approved</Badge>;
-      case "rejected":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+  const getCategoryStatus = (category: SuperCategory): VerificationStatus => {
+    if (!tutorProfile) return "not_applied";
+    
+    switch (category) {
+      case "school_tutoring":
+        return (tutorProfile.schoolTutoringStatus as VerificationStatus) || "not_applied";
+      case "higher_education":
+        return (tutorProfile.higherEducationStatus as VerificationStatus) || "not_applied";
+      case "professional_skills":
+        return (tutorProfile.professionalSkillsStatus as VerificationStatus) || "not_applied";
       default:
-        return null;
+        return "not_applied";
     }
   };
+
+  const getCategoryRequest = (category: SuperCategory): VerificationRequest | undefined => {
+    return requests.find(r => r.verificationType === category);
+  };
+
+  const getStatusBadge = (status: VerificationStatus) => {
+    switch (status) {
+      case "pending":
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+      case "approved":
+        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Verified</Badge>;
+      case "rejected":
+        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+      case "not_applied":
+      default:
+        return <Badge variant="outline"><AlertCircle className="w-3 h-3 mr-1" />Not Applied</Badge>;
+    }
+  };
+
+  const getActionButton = (category: SuperCategory, status: VerificationStatus) => {
+    const config = CATEGORY_CONFIG[category];
+    
+    if (status === "approved") {
+      return (
+        <Button className="w-full" disabled variant="outline">
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Verified
+        </Button>
+      );
+    }
+    
+    if (status === "pending") {
+      return (
+        <Button className="w-full" disabled variant="outline">
+          <Clock className="w-4 h-4 mr-2" />
+          Under Review
+        </Button>
+      );
+    }
+    
+    return (
+      <Button 
+        className="w-full" 
+        onClick={() => handleApply(category)}
+        data-testid={`button-apply-${category}`}
+      >
+        <Upload className="w-4 h-4 mr-2" />
+        Apply (KES {config.fee})
+      </Button>
+    );
+  };
+
+  const approvedCount = (["school_tutoring", "higher_education", "professional_skills"] as SuperCategory[])
+    .filter(cat => getCategoryStatus(cat) === "approved").length;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Verification</h1>
-          <p className="text-slate-500">Get verified to build trust and appear higher in search results</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Verification</h1>
+          <p className="text-slate-500 dark:text-slate-400">Get verified in one or more categories to build trust and attract more students</p>
         </div>
 
-        {approvedRequest ? (
-          <Card className="border-green-200 bg-green-50">
+        {approvedCount > 0 && (
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-7 h-7 text-green-600" />
+                <div className="w-14 h-14 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                  <Shield className="w-7 h-7 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-medium text-green-900">Verified Tutor</h3>
-                  <p className="text-sm text-green-700">
-                    Congratulations! You are a verified {approvedRequest.verificationType === "school" ? "School" : "Higher Ed/Professional"} tutor.
+                  <h3 className="font-medium text-green-900 dark:text-green-100">Verified Tutor</h3>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    You are verified in {approvedCount} {approvedCount === 1 ? "category" : "categories"}
                   </p>
                 </div>
-                {getStatusBadge("approved")}
-              </div>
-            </CardContent>
-          </Card>
-        ) : pendingRequest ? (
-          <Card className="border-yellow-200 bg-yellow-50">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center">
-                  <Clock className="w-7 h-7 text-yellow-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-yellow-900">Verification In Progress</h3>
-                  <p className="text-sm text-yellow-700">
-                    Your {pendingRequest.verificationType === "school" ? "School Tutoring" : "Higher Ed/Professional"} verification request is being reviewed.
-                  </p>
-                  <p className="text-xs text-yellow-600 mt-1">
-                    Submitted: {new Date(pendingRequest.submittedAt).toLocaleDateString()}
-                  </p>
-                </div>
-                {getStatusBadge("pending")}
-              </div>
-            </CardContent>
-          </Card>
-        ) : rejectedRequest ? (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
-                  <XCircle className="w-7 h-7 text-red-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-red-900">Verification Rejected</h3>
-                  <p className="text-sm text-red-700">
-                    Your previous verification request was rejected. You can submit a new request.
-                  </p>
-                  {rejectedRequest.reviewNotes && (
-                    <p className="text-xs text-red-600 mt-1">
-                      Reason: {rejectedRequest.reviewNotes}
-                    </p>
-                  )}
-                </div>
-                {getStatusBadge("rejected")}
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-yellow-200 bg-yellow-50">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center">
-                  <Shield className="w-7 h-7 text-yellow-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-yellow-900">Not Verified</h3>
-                  <p className="text-sm text-yellow-700">Complete verification to unlock all tutor benefits</p>
-                </div>
-                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>
+                <Badge className="bg-green-600 text-white">
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Verified
+                </Badge>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {!pendingRequest && !approvedRequest && (
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <School className="w-6 h-6 text-blue-600" />
+        <div className="grid lg:grid-cols-3 gap-6">
+          {(Object.entries(CATEGORY_CONFIG) as [SuperCategory, typeof CATEGORY_CONFIG[SuperCategory]][]).map(([category, config]) => {
+            const status = getCategoryStatus(category);
+            const request = getCategoryRequest(category);
+            const Icon = config.icon;
+            
+            return (
+              <Card key={category} className={status === "approved" ? "border-green-200 dark:border-green-800" : ""}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 ${config.iconBg} rounded-lg flex items-center justify-center`}>
+                        <Icon className={`w-6 h-6 ${config.iconColor}`} />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{config.title}</CardTitle>
+                        <CardDescription>{config.description}</CardDescription>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle>School Tutoring</CardTitle>
-                    <CardDescription>Primary and secondary school subjects</CardDescription>
+                  <div className="mt-3">
+                    {getStatusBadge(status)}
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-600">
-                    Verify your credentials to tutor students in primary and secondary school subjects.
-                  </p>
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <span className="text-sm font-medium">Verification Fee</span>
-                    <span className="font-bold text-slate-900">KES 500</span>
-                  </div>
-                  <ul className="text-sm text-slate-600 space-y-2">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      Teaching certificate or degree
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      National ID verification
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      Background check
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleApply("school")}
-                    data-testid="button-apply-school"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Apply for Verification
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <span className="text-sm font-medium">Verification Fee</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">KES {config.fee}</span>
+                    </div>
+                    
+                    <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
+                      {config.requirements.map((req, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                          <span>{req}</span>
+                        </li>
+                      ))}
+                    </ul>
 
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <GraduationCap className="w-6 h-6 text-purple-600" />
+                    {status === "rejected" && request?.reviewNotes && (
+                      <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                        <p className="text-sm text-red-700 dark:text-red-300">
+                          <strong>Rejection reason:</strong> {request.reviewNotes}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400 p-2 bg-blue-50 dark:bg-blue-950 rounded">
+                      {config.visibility}
+                    </div>
+                    
+                    {getActionButton(category, status)}
                   </div>
-                  <div>
-                    <CardTitle>Higher Ed / Professional</CardTitle>
-                    <CardDescription>University and professional skills</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-600">
-                    Verify your expertise to tutor university students or teach professional skills.
-                  </p>
-                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <span className="text-sm font-medium">Verification Fee</span>
-                    <span className="font-bold text-slate-900">KES 300</span>
-                  </div>
-                  <ul className="text-sm text-slate-600 space-y-2">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      University degree or certification
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      Professional experience proof
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      Skills assessment
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full" 
-                    variant="outline" 
-                    onClick={() => handleApply("higher_ed")}
-                    data-testid="button-apply-higher"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Apply for Verification
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
         <Card>
           <CardHeader>
@@ -372,15 +400,15 @@ export default function TutorVerification() {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                 <CheckCircle className="w-6 h-6 text-green-500" />
                 <span className="text-sm font-medium">Verified badge on profile</span>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                 <CheckCircle className="w-6 h-6 text-green-500" />
                 <span className="text-sm font-medium">Higher search ranking</span>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                 <CheckCircle className="w-6 h-6 text-green-500" />
                 <span className="text-sm font-medium">Increased student trust</span>
               </div>
@@ -395,22 +423,26 @@ export default function TutorVerification() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {requests.map((request: any) => (
-                  <div key={request.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-slate-500" />
-                      <div>
-                        <p className="font-medium text-slate-900">
-                          {request.verificationType === "school" ? "School Tutoring" : "Higher Ed/Professional"}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Submitted: {new Date(request.submittedAt).toLocaleDateString()}
-                        </p>
+                {requests.map((request) => {
+                  const config = CATEGORY_CONFIG[request.verificationType as SuperCategory];
+                  return (
+                    <div key={request.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-slate-500" />
+                        <div>
+                          <p className="font-medium text-slate-900 dark:text-slate-100">
+                            {config?.title || request.verificationType}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Submitted: {new Date(request.submittedAt!).toLocaleDateString()}
+                            {request.reviewedAt && ` | Reviewed: ${new Date(request.reviewedAt).toLocaleDateString()}`}
+                          </p>
+                        </div>
                       </div>
+                      {getStatusBadge(request.status as VerificationStatus)}
                     </div>
-                    {getStatusBadge(request.status)}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -421,17 +453,17 @@ export default function TutorVerification() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Apply for {selectedType === "school" ? "School Tutoring" : "Higher Ed/Professional"} Verification
+              Apply for {selectedCategory ? CATEGORY_CONFIG[selectedCategory].title : ""} Verification
             </DialogTitle>
             <DialogDescription>
-              Upload your documents for verification. Fee: KES {selectedType === "school" ? "500" : "300"}
+              Upload your documents for verification. Fee: KES {selectedCategory ? CATEGORY_CONFIG[selectedCategory].fee : ""}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>
-                {selectedType === "school" ? "Teaching Certificate/Degree" : "University Degree/Certification"} *
+                {selectedCategory ? CATEGORY_CONFIG[selectedCategory].documentLabel : "Document"} *
               </Label>
               <input
                 ref={documentInputRef}
@@ -441,9 +473,9 @@ export default function TutorVerification() {
                 className="hidden"
               />
               {documentPath ? (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <FileText className="w-5 h-5 text-green-600" />
-                  <span className="flex-1 text-sm text-green-800 truncate">{documentName}</span>
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <span className="flex-1 text-sm text-green-800 dark:text-green-200 truncate">{documentName}</span>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -470,13 +502,13 @@ export default function TutorVerification() {
                   {isUploadingDocument ? "Uploading..." : "Upload Document (Photo or PDF)"}
                 </Button>
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Upload a clear photo or PDF of your certificate/degree (max 10MB)
               </p>
             </div>
             
             <div className="space-y-2">
-              <Label>National ID (Optional)</Label>
+              <Label>National ID (Optional but recommended)</Label>
               <input
                 ref={nationalIdInputRef}
                 type="file"
@@ -485,9 +517,9 @@ export default function TutorVerification() {
                 className="hidden"
               />
               {nationalIdPath ? (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <Image className="w-5 h-5 text-green-600" />
-                  <span className="flex-1 text-sm text-green-800 truncate">{nationalIdName}</span>
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <span className="flex-1 text-sm text-green-800 dark:text-green-200 truncate">{nationalIdName}</span>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -528,8 +560,8 @@ export default function TutorVerification() {
               />
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
                 <strong>Accepted formats:</strong> JPG, PNG, GIF, or PDF. Maximum file size: 10MB.
               </p>
             </div>

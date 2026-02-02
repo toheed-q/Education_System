@@ -214,11 +214,35 @@ export default function TutorProfile() {
             </div>
             
             <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-3 mb-3">
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                  <CheckCircle className="w-4 h-4" />
-                  Verified Tutor
-                </span>
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {tutor.schoolTutoringStatus === "approved" && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" />
+                    School Tutoring Verified
+                  </span>
+                )}
+                {tutor.higherEducationStatus === "approved" && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" />
+                    Higher Ed Verified
+                  </span>
+                )}
+                {tutor.professionalSkillsStatus === "approved" && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" />
+                    Professional Skills Verified
+                  </span>
+                )}
+                {tutor.higherEducationStatus === "pending" && tutor.higherEducationStatus !== "approved" && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+                    Higher Ed Pending
+                  </span>
+                )}
+                {tutor.professionalSkillsStatus === "pending" && tutor.professionalSkillsStatus !== "approved" && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+                    Professional Skills Pending
+                  </span>
+                )}
                 <span className="flex items-center gap-1 text-amber-500 text-sm">
                   <Star className="w-4 h-4 fill-current" />
                   4.8 (24 reviews)

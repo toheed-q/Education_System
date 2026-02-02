@@ -71,12 +71,14 @@ export interface IStorage {
   getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]>;
 
   // Verification Requests
-  createVerificationRequest(request: { tutorProfileId: number; verificationType: "school" | "higher_ed"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest>;
+  createVerificationRequest(request: { tutorProfileId: number; verificationType: "school_tutoring" | "higher_education" | "professional_skills"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest>;
   getVerificationRequestsByTutor(tutorProfileId: number): Promise<VerificationRequest[]>;
   getPendingVerificationRequests(): Promise<(VerificationRequest & { tutorProfile: TutorProfile & { user: User } })[]>;
   updateVerificationRequestStatus(id: number, status: "pending" | "approved" | "rejected", reviewedBy: number, reviewNotes?: string): Promise<VerificationRequest | undefined>;
   getTutorProfileByUserId(userId: number): Promise<TutorProfile | undefined>;
   updateTutorVerificationStatus(tutorProfileId: number, status: "pending" | "approved" | "rejected"): Promise<TutorProfile | undefined>;
+  updateTutorCategoryStatus(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", status: "pending" | "approved" | "rejected" | "not_applied"): Promise<TutorProfile | undefined>;
+  updateTutorCategorySubjects(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", subjects: string[]): Promise<TutorProfile | undefined>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -179,15 +181,28 @@ export class DatabaseStorage implements IStorage {
 
   async getTutors(subject?: string): Promise<(TutorProfile & { user: User })[]> {
     // Basic join, filtering by subject in JS for simplicity with JSONB for now or advanced query later
-    // For MVP, return all and filter
     const results = await db.select().from(tutorProfiles).innerJoin(users, eq(tutorProfiles.userId, users.id));
     
     const mapped = results.map(r => ({ ...r.tutor_profiles, user: r.users }));
     
+    // Visibility logic:
+    // - School Tutoring: Must be APPROVED to be visible
+    // - Higher Education: Can be visible while pending (not "not_applied")
+    // - Professional Skills: Can be visible while pending (not "not_applied")
+    // A tutor is visible if they're approved in School OR have applied (pending/approved) in Higher Ed or Professional
+    const visible = mapped.filter(t => {
+      const schoolApproved = t.schoolTutoringStatus === "approved";
+      const higherEdApplied = t.higherEducationStatus !== "not_applied";
+      const professionalApplied = t.professionalSkillsStatus !== "not_applied";
+      
+      // Visible if approved in school, OR if they've applied for higher ed/professional
+      return schoolApproved || higherEdApplied || professionalApplied;
+    });
+    
     if (subject) {
-      return mapped.filter(t => (t.subjects as string[]).includes(subject));
+      return visible.filter(t => (t.subjects as string[]).includes(subject));
     }
-    return mapped;
+    return visible;
   }
 
   async getTutorProfile(id: number): Promise<(TutorProfile & { user: User }) | undefined> {
@@ -397,7 +412,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(quizAttempts.userId, userId), eq(quizAttempts.passed, true)));
   }
 
-  async createVerificationRequest(request: { tutorProfileId: number; verificationType: "school" | "higher_ed"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest> {
+  async createVerificationRequest(request: { tutorProfileId: number; verificationType: "school_tutoring" | "higher_education" | "professional_skills"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest> {
     const [newRequest] = await db.insert(verificationRequests).values(request).returning();
     return newRequest;
   }
@@ -438,6 +453,42 @@ export class DatabaseStorage implements IStorage {
   async updateTutorVerificationStatus(tutorProfileId: number, status: "pending" | "approved" | "rejected"): Promise<TutorProfile | undefined> {
     const [updated] = await db.update(tutorProfiles)
       .set({ verificationStatus: status })
+      .where(eq(tutorProfiles.id, tutorProfileId))
+      .returning();
+    return updated;
+  }
+
+  async updateTutorCategoryStatus(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", status: "pending" | "approved" | "rejected" | "not_applied"): Promise<TutorProfile | undefined> {
+    const updateData: Record<string, string> = {};
+    
+    if (category === "school_tutoring") {
+      updateData.schoolTutoringStatus = status;
+    } else if (category === "higher_education") {
+      updateData.higherEducationStatus = status;
+    } else if (category === "professional_skills") {
+      updateData.professionalSkillsStatus = status;
+    }
+    
+    const [updated] = await db.update(tutorProfiles)
+      .set(updateData)
+      .where(eq(tutorProfiles.id, tutorProfileId))
+      .returning();
+    return updated;
+  }
+
+  async updateTutorCategorySubjects(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", subjects: string[]): Promise<TutorProfile | undefined> {
+    const updateData: Record<string, string[]> = {};
+    
+    if (category === "school_tutoring") {
+      updateData.schoolTutoringSubjects = subjects;
+    } else if (category === "higher_education") {
+      updateData.higherEducationSubjects = subjects;
+    } else if (category === "professional_skills") {
+      updateData.professionalSkillsSubjects = subjects;
+    }
+    
+    const [updated] = await db.update(tutorProfiles)
+      .set(updateData)
       .where(eq(tutorProfiles.id, tutorProfileId))
       .returning();
     return updated;

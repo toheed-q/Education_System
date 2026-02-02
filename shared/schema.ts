@@ -8,8 +8,9 @@ export const contentTypeEnum = pgEnum("content_type", ["video", "reading", "file
 export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "completed", "cancelled"]);
 export const sessionTypeEnum = pgEnum("session_type", ["online", "physical"]);
 export const paymentIntentStatusEnum = pgEnum("payment_intent_status", ["initiated", "paid", "failed", "expired"]);
-export const verificationStatusEnum = pgEnum("verification_status", ["pending", "approved", "rejected"]);
+export const verificationStatusEnum = pgEnum("verification_status", ["pending", "approved", "rejected", "not_applied"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "rejected"]);
+export const superCategoryEnum = pgEnum("super_category", ["school_tutoring", "higher_education", "professional_skills"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -114,7 +115,16 @@ export const tutorProfiles = pgTable("tutor_profiles", {
   userId: integer("user_id").notNull().unique().references(() => users.id),
   bio: text("bio").notNull(),
   hourlyRate: integer("hourly_rate_kes").notNull(),
-  subjects: jsonb("subjects").notNull(), // Array of strings
+  subjects: jsonb("subjects").notNull(), // Array of strings (legacy, for backwards compat)
+  // Per-category verification status
+  schoolTutoringStatus: verificationStatusEnum("school_tutoring_status").default("not_applied"),
+  higherEducationStatus: verificationStatusEnum("higher_education_status").default("not_applied"),
+  professionalSkillsStatus: verificationStatusEnum("professional_skills_status").default("not_applied"),
+  // Per-category subjects
+  schoolTutoringSubjects: jsonb("school_tutoring_subjects").default([]),
+  higherEducationSubjects: jsonb("higher_education_subjects").default([]),
+  professionalSkillsSubjects: jsonb("professional_skills_subjects").default([]),
+  // Legacy field - kept for backwards compatibility
   verificationStatus: verificationStatusEnum("verification_status").default("pending"),
   earnings: integer("earnings_kes").default(0),
 });
@@ -166,7 +176,7 @@ export const messages = pgTable("messages", {
   sentAt: timestamp("sent_at").defaultNow(),
 });
 
-export const verificationTypeEnum = pgEnum("verification_type", ["school", "higher_ed"]);
+export const verificationTypeEnum = pgEnum("verification_type", ["school_tutoring", "higher_education", "professional_skills"]);
 
 export const verificationRequests = pgTable("verification_requests", {
   id: serial("id").primaryKey(),
@@ -234,7 +244,14 @@ export const insertContentSchema = createInsertSchema(courseContent).omit({ id: 
 export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(quizQuestions).omit({ id: true });
 export const insertQuizAttemptSchema = createInsertSchema(quizAttempts).omit({ id: true, submittedAt: true });
-export const insertTutorProfileSchema = createInsertSchema(tutorProfiles).omit({ id: true, verificationStatus: true, earnings: true });
+export const insertTutorProfileSchema = createInsertSchema(tutorProfiles).omit({ 
+  id: true, 
+  verificationStatus: true, 
+  earnings: true,
+  schoolTutoringStatus: true,
+  higherEducationStatus: true,
+  professionalSkillsStatus: true,
+});
 export const insertBookingSchema = createInsertSchema(bookings, {
   startTime: z.coerce.date(),
   endTime: z.coerce.date(),
@@ -247,6 +264,14 @@ export const insertPaymentIntentSchema = createInsertSchema(bookingPaymentIntent
 
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, read: true, sentAt: true });
+export const insertVerificationRequestSchema = createInsertSchema(verificationRequests).omit({ 
+  id: true, 
+  status: true, 
+  reviewNotes: true, 
+  reviewedBy: true, 
+  submittedAt: true, 
+  reviewedAt: true 
+});
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -271,6 +296,9 @@ export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type VerificationRequest = typeof verificationRequests.$inferSelect;
+export type InsertVerificationRequest = z.infer<typeof insertVerificationRequestSchema>;
+export type SuperCategory = "school_tutoring" | "higher_education" | "professional_skills";
+export type VerificationStatus = "pending" | "approved" | "rejected" | "not_applied";
 
 // Request/Response Types
 export type LoginRequest = z.infer<typeof insertUserSchema>; // simplified

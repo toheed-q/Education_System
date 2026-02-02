@@ -392,6 +392,27 @@ Only respond with the description text, nothing else.`
     res.json(tutor);
   });
 
+  // Get current tutor's own profile (includes category-specific verification statuses)
+  app.get("/api/tutors/my-profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (user.role !== "tutor") {
+      return res.status(403).json({ message: "Only tutors can access this endpoint" });
+    }
+    
+    try {
+      const profile = await storage.getTutorProfileByUserId(user.id);
+      if (!profile) {
+        return res.status(404).json({ message: "Tutor profile not found" });
+      }
+      res.json(profile);
+    } catch (err) {
+      console.error("Get my profile error:", err);
+      res.status(500).json({ message: "Failed to get profile" });
+    }
+  });
+
   // Bookings - Initiate Payment (step 1 of booking flow)
   app.post("/api/bookings/initiate-payment", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
@@ -669,7 +690,10 @@ Only respond with the description text, nothing else.`
     }
   });
 
-  // Verification Requests
+  // Verification Requests - Three Super Categories
+  // School Tutoring: KES 500 fee - Must be verified before visible
+  // Higher Education: KES 300 fee - Can be visible while pending
+  // Professional Skills: KES 300 fee - Can be visible while pending
   app.post("/api/verification-requests", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     
@@ -679,10 +703,11 @@ Only respond with the description text, nothing else.`
     }
     
     try {
-      const { verificationType, documentUrl, nationalIdUrl, additionalNotes } = req.body;
+      const { verificationType, documentUrl, nationalIdUrl, additionalNotes, subjects } = req.body;
       
-      if (!["school", "higher_ed"].includes(verificationType)) {
-        return res.status(400).json({ message: "Invalid verification type" });
+      const validTypes = ["school_tutoring", "higher_education", "professional_skills"];
+      if (!validTypes.includes(verificationType)) {
+        return res.status(400).json({ message: "Invalid verification type. Must be school_tutoring, higher_education, or professional_skills" });
       }
       
       if (!documentUrl) {
@@ -695,8 +720,8 @@ Only respond with the description text, nothing else.`
         return res.status(404).json({ message: "Tutor profile not found" });
       }
       
-      // Calculate fee based on type
-      const feeAmountKes = verificationType === "school" ? 500 : 300;
+      // Calculate fee based on type - School Tutoring: KES 500, others: KES 300
+      const feeAmountKes = verificationType === "school_tutoring" ? 500 : 300;
       
       const request = await storage.createVerificationRequest({
         tutorProfileId: tutorProfile.id,
@@ -707,8 +732,13 @@ Only respond with the description text, nothing else.`
         feeAmountKes,
       });
       
-      // Reset tutor profile verification status to pending when submitting a new request
-      await storage.updateTutorVerificationStatus(tutorProfile.id, "pending");
+      // Update category-specific verification status to pending
+      await storage.updateTutorCategoryStatus(tutorProfile.id, verificationType, "pending");
+      
+      // Update category-specific subjects if provided
+      if (subjects && Array.isArray(subjects)) {
+        await storage.updateTutorCategorySubjects(tutorProfile.id, verificationType, subjects);
+      }
       
       res.status(201).json(request);
     } catch (err) {
@@ -778,11 +808,14 @@ Only respond with the description text, nothing else.`
         return res.status(404).json({ message: "Verification request not found" });
       }
       
-      // Update tutor profile verification status based on decision
+      // Update category-specific verification status based on decision
+      const categoryStatus = status as "approved" | "rejected";
+      await storage.updateTutorCategoryStatus(updated.tutorProfileId, updated.verificationType, categoryStatus);
+      
+      // Also update legacy verificationStatus for backwards compatibility
+      // Set to approved only if at least one category is approved
       if (status === "approved") {
         await storage.updateTutorVerificationStatus(updated.tutorProfileId, "approved");
-      } else if (status === "rejected") {
-        await storage.updateTutorVerificationStatus(updated.tutorProfileId, "rejected");
       }
       
       res.json(updated);
