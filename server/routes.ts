@@ -459,21 +459,17 @@ Only respond with the description text, nothing else.`
     }
   });
 
-  // Get booked time slots for a tutor on a given date (authenticated)
+  // Get booked time slots for a tutor (authenticated)
   app.get("/api/bookings/booked-slots", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const { tutorId, date } = req.query;
-      if (!tutorId || !date) {
-        return res.status(400).json({ message: "tutorId and date are required" });
-      }
-      const dateStr = String(date);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+      const { tutorId } = req.query;
+      if (!tutorId) {
+        return res.status(400).json({ message: "tutorId is required" });
       }
       const user = req.user as any;
-      const tutorSlots = await storage.getBookedSlotsForTutor(Number(tutorId), dateStr);
-      const studentSlots = await storage.getBookedSlotsForStudent(user.id, dateStr);
+      const tutorSlots = await storage.getBookedSlotsForTutor(Number(tutorId));
+      const studentSlots = await storage.getBookedSlotsForStudent(user.id);
       const allBooked = Array.from(new Set([...tutorSlots, ...studentSlots]));
       res.json({ bookedSlots: allBooked });
     } catch (err) {
@@ -527,14 +523,13 @@ Only respond with the description text, nothing else.`
       }
       
       // Check for scheduling conflicts
-      const dateStr = start.toISOString().split('T')[0];
-      const timeStr = start.getHours().toString().padStart(2, '0') + ':' + start.getMinutes().toString().padStart(2, '0');
-      const tutorBookedSlots = await storage.getBookedSlotsForTutor(tutorId, dateStr);
-      if (tutorBookedSlots.includes(timeStr)) {
+      const startIso = start.toISOString();
+      const tutorBookedSlots = await storage.getBookedSlotsForTutor(tutorId);
+      if (tutorBookedSlots.some(iso => iso.substring(0, 16) === startIso.substring(0, 16))) {
         return res.status(409).json({ message: "This tutor already has a booking at this time. Please choose a different time." });
       }
-      const studentBookedSlots = await storage.getBookedSlotsForStudent(user.id, dateStr);
-      if (studentBookedSlots.includes(timeStr)) {
+      const studentBookedSlots = await storage.getBookedSlotsForStudent(user.id);
+      if (studentBookedSlots.some(iso => iso.substring(0, 16) === startIso.substring(0, 16))) {
         return res.status(409).json({ message: "You already have a booking at this time. Please choose a different time." });
       }
       

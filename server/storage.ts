@@ -50,8 +50,8 @@ export interface IStorage {
   updateBookingStatus(id: number, status: "pending" | "confirmed" | "completed" | "cancelled"): Promise<Booking | undefined>;
   updateBookingMeetingLink(id: number, meetingLink: string): Promise<Booking | undefined>;
   
-  getBookedSlotsForTutor(tutorId: number, date: string): Promise<string[]>;
-  getBookedSlotsForStudent(studentId: number, date: string): Promise<string[]>;
+  getBookedSlotsForTutor(tutorId: number): Promise<string[]>;
+  getBookedSlotsForStudent(studentId: number): Promise<string[]>;
   
   // Payment Intents
   createPaymentIntent(intent: { studentId: number; tutorId: number; startTime: Date; endTime: Date; sessionType: string; location?: string | null; amountKes: number; platformFeeKes: number; tutorShareKes: number; paystackReference: string; subject?: string | null; gradeLevel?: string | null; topic?: string | null; sessionNotes?: string | null }): Promise<BookingPaymentIntent>;
@@ -297,40 +297,26 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getBookedSlotsForTutor(tutorId: number, date: string): Promise<string[]> {
-    const dayStart = new Date(`${date}T00:00:00`);
-    const dayEnd = new Date(`${date}T23:59:59`);
+  async getBookedSlotsForTutor(tutorId: number): Promise<string[]> {
     const results = await db.select({ startTime: bookings.startTime })
       .from(bookings)
       .where(and(
         eq(bookings.tutorId, tutorId),
-        sql`${bookings.startTime} >= ${dayStart}`,
-        sql`${bookings.startTime} <= ${dayEnd}`,
+        sql`${bookings.startTime} >= NOW()`,
         sql`${bookings.status} NOT IN ('cancelled')`
       ));
-    return results.map(r => {
-      const h = r.startTime.getHours().toString().padStart(2, '0');
-      const m = r.startTime.getMinutes().toString().padStart(2, '0');
-      return `${h}:${m}`;
-    });
+    return results.map(r => r.startTime.toISOString());
   }
 
-  async getBookedSlotsForStudent(studentId: number, date: string): Promise<string[]> {
-    const dayStart = new Date(`${date}T00:00:00`);
-    const dayEnd = new Date(`${date}T23:59:59`);
+  async getBookedSlotsForStudent(studentId: number): Promise<string[]> {
     const results = await db.select({ startTime: bookings.startTime })
       .from(bookings)
       .where(and(
         eq(bookings.studentId, studentId),
-        sql`${bookings.startTime} >= ${dayStart}`,
-        sql`${bookings.startTime} <= ${dayEnd}`,
+        sql`${bookings.startTime} >= NOW()`,
         sql`${bookings.status} NOT IN ('cancelled')`
       ));
-    return results.map(r => {
-      const h = r.startTime.getHours().toString().padStart(2, '0');
-      const m = r.startTime.getMinutes().toString().padStart(2, '0');
-      return `${h}:${m}`;
-    });
+    return results.map(r => r.startTime.toISOString());
   }
 
   async getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]> {

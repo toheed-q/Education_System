@@ -53,15 +53,26 @@ export default function TutorProfile() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const { data: bookedSlotsData } = useQuery<{ bookedSlots: string[] }>({
-    queryKey: ['/api/bookings/booked-slots', tutor?.id, selectedDate],
+    queryKey: ['/api/bookings/booked-slots', tutor?.user?.id],
     queryFn: async () => {
-      const params = new URLSearchParams({ tutorId: String(tutor!.id), date: selectedDate });
+      const params = new URLSearchParams({ tutorId: String(tutor!.user.id) });
       const res = await fetch(`/api/bookings/booked-slots?${params.toString()}`);
       return res.json();
     },
-    enabled: !!tutor && !!selectedDate && !!user,
+    enabled: !!tutor?.user && !!user,
   });
-  const bookedSlots = bookedSlotsData?.bookedSlots || [];
+  const bookedSlots = selectedDate
+    ? (bookedSlotsData?.bookedSlots || [])
+        .filter((iso: string) => {
+          const d = new Date(iso);
+          const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          return localDate === selectedDate;
+        })
+        .map((iso: string) => {
+          const d = new Date(iso);
+          return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+        })
+    : [];
 
   useEffect(() => {
     if (selectedTime && bookedSlots.includes(selectedTime)) {
