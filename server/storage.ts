@@ -291,6 +291,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBookingsForUser(userId: number, role: "student" | "tutor"): Promise<(Booking & { tutor?: User, student?: User })[]> {
+    await db.update(bookings)
+      .set({ status: "cancelled" })
+      .where(and(eq(bookings.status, "pending"), sql`${bookings.startTime} < NOW()`));
+
     if (role === "student") {
       const results = await db.select()
         .from(bookings)

@@ -526,10 +526,11 @@ Only respond with the description text, nothing else.`
       }
       
       // Create payment intent in database with validated session type
+      // Store the tutor's USER ID (not profile ID) since bookings.tutorId references users.id
       const trimmedLocation = validatedSessionType === "physical" ? location.trim() : null;
       const intent = await storage.createPaymentIntent({
         studentId: user.id,
-        tutorId,
+        tutorId: tutorProfile.user.id,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         sessionType: validatedSessionType as "online" | "physical",
