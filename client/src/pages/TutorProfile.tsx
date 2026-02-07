@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { saveIntent, getIntent, clearIntent, type BookingIntent, type MessageIntent } from "@/lib/intent";
 
@@ -51,6 +51,23 @@ export default function TutorProfile() {
   const [sessionNotes, setSessionNotes] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const { data: bookedSlotsData } = useQuery<{ bookedSlots: string[] }>({
+    queryKey: ['/api/bookings/booked-slots', tutor?.id, selectedDate],
+    queryFn: async () => {
+      const params = new URLSearchParams({ tutorId: String(tutor!.id), date: selectedDate });
+      const res = await fetch(`/api/bookings/booked-slots?${params.toString()}`);
+      return res.json();
+    },
+    enabled: !!tutor && !!selectedDate && !!user,
+  });
+  const bookedSlots = bookedSlotsData?.bookedSlots || [];
+
+  useEffect(() => {
+    if (selectedTime && bookedSlots.includes(selectedTime)) {
+      setSelectedTime("");
+    }
+  }, [bookedSlots, selectedTime]);
 
   useEffect(() => {
     if (!user || !tutor) return;
@@ -112,6 +129,7 @@ export default function TutorProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings/booked-slots"] });
       toast({
         title: "Booking Confirmed!",
         description: "Your payment was successful. The tutor will see your booking request.",
@@ -450,21 +468,28 @@ export default function TutorProfile() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Select Time</label>
                       <div className="grid grid-cols-3 gap-2">
-                        {timeSlots.map((time) => (
-                          <button
-                            key={time}
-                            onClick={() => setSelectedTime(time)}
-                            className={cn(
-                              "p-3 rounded-lg border text-center transition-all",
-                              selectedTime === time 
-                                ? "border-primary bg-primary/5 text-primary" 
-                                : "border-slate-200 hover:border-slate-300"
-                            )}
-                            data-testid={`button-time-${time}`}
-                          >
-                            {time}
-                          </button>
-                        ))}
+                        {timeSlots.map((time) => {
+                          const isBooked = bookedSlots.includes(time);
+                          return (
+                            <button
+                              key={time}
+                              onClick={() => !isBooked && setSelectedTime(time)}
+                              disabled={isBooked}
+                              className={cn(
+                                "p-3 rounded-lg border text-center transition-all",
+                                isBooked
+                                  ? "border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed line-through"
+                                  : selectedTime === time 
+                                    ? "border-primary bg-primary/5 text-primary" 
+                                    : "border-slate-200 hover:border-slate-300"
+                              )}
+                              title={isBooked ? "This time slot is already booked" : ""}
+                              data-testid={`button-time-${time}`}
+                            >
+                              {time}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                     
