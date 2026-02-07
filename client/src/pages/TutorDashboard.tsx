@@ -228,9 +228,11 @@ export default function TutorDashboard() {
                   Complete your verification to appear higher in search results and build trust with students.
                 </p>
               </div>
-              <Button variant="outline" className="border-yellow-300 text-yellow-700 hover:bg-yellow-100">
-                Get Verified
-              </Button>
+              <Link href="/tutor/verification">
+                <Button variant="outline" className="border-yellow-300 text-yellow-700 hover:bg-yellow-100" data-testid="button-get-verified">
+                  Get Verified
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
