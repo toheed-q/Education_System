@@ -327,7 +327,7 @@ export default function CourseDetails() {
               </span>
             </div>
             
-            <h1 className="text-4xl md:text-5xl font-display font-bold mb-6 leading-tight" data-testid="text-course-title">
+            <h1 className="text-4xl md:text-5xl font-display font-bold mb-6 leading-tight text-white" data-testid="text-course-title">
               {course.title}
             </h1>
             <p className="text-xl text-slate-300 leading-relaxed mb-8" data-testid="text-course-description">
@@ -345,9 +345,6 @@ export default function CourseDetails() {
                 >
                   {enrollMutation.isPending ? "Enrolling..." : `Enroll Now - KES ${course.price.toLocaleString()}`}
                 </Button>
-                <span className="text-slate-400 text-sm">
-                  30-day money-back guarantee
-                </span>
               </div>
             )}
             {isEnrolled && (
@@ -485,9 +482,6 @@ export default function CourseDetails() {
                   Enroll Now
                 </Button>
                 
-                <p className="text-xs text-slate-500 text-center mb-6">
-                  30-day money-back guarantee
-                </p>
 
                 <div className="space-y-4 pt-6 border-t border-slate-100">
                   <div className="flex items-center gap-3 text-sm text-slate-600">
