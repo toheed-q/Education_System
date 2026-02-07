@@ -172,6 +172,8 @@ export default function TutorProfile() {
         return;
       }
       
+      setBookingOpen(false);
+
       const popup = new window.PaystackPop();
       popup.newTransaction({
         key: paystackPublicKey,
@@ -180,12 +182,12 @@ export default function TutorProfile() {
         currency: "KES",
         ref: paymentData.reference,
         onSuccess: async (response) => {
-          // Step 3: Verify payment with backend
           await verifyPayment.mutateAsync(response.reference);
           setIsProcessingPayment(false);
         },
         onCancel: () => {
           setIsProcessingPayment(false);
+          setBookingOpen(true);
           toast({
             title: "Payment Cancelled",
             description: "You cancelled the payment process.",
