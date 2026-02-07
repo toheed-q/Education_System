@@ -425,7 +425,7 @@ Only respond with the description text, nothing else.`
           amount: amount * 100,
           currency: "KES",
           reference,
-          callback_url: `${req.protocol}://${req.get('host')}/enrollment/callback`,
+          callback_url: `${req.headers['x-forwarded-proto'] || req.protocol}://${req.get('host')}/enrollment/callback`,
           metadata: {
             intentId: intent.id,
             courseId,
@@ -726,7 +726,7 @@ Only respond with the description text, nothing else.`
           amount: amount * 100, // Paystack uses kobo (cents)
           currency: "KES",
           reference,
-          callback_url: `${req.protocol}://${req.get('host')}/payment/callback`,
+          callback_url: `${req.headers['x-forwarded-proto'] || req.protocol}://${req.get('host')}/payment/callback`,
           metadata: {
             intentId: intent.id,
             tutorId,
