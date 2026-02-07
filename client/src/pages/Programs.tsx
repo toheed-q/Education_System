@@ -34,64 +34,63 @@ export default function Programs() {
         ) : (
           <div className="grid md:grid-cols-2 gap-8">
             {programs?.map((program, index) => (
-              <motion.div
-                key={program.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden group hover:shadow-xl transition-shadow"
-                data-testid={`card-program-${program.id}`}
-              >
-                <div className="h-3 bg-gradient-to-r from-primary to-secondary" />
-                <div className="p-8">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <BookOpen className="w-7 h-7 text-primary" />
+              <Link href={`/programs/${program.slug}`} key={program.id}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden group hover:shadow-xl transition-shadow cursor-pointer"
+                  data-testid={`card-program-${program.id}`}
+                >
+                  <div className="h-3 bg-gradient-to-r from-primary to-secondary" />
+                  <div className="p-8">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <BookOpen className="w-7 h-7 text-primary" />
+                      </div>
+                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                        Open Enrollment
+                      </span>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                      Open Enrollment
-                    </span>
-                  </div>
-                  
-                  <h2 className="text-2xl font-bold text-slate-900 mb-3 group-hover:text-primary transition-colors" data-testid={`text-program-title-${program.id}`}>
-                    {program.title}
-                  </h2>
-                  
-                  <p className="text-slate-600 mb-6 line-clamp-3">
-                    {program.description}
-                  </p>
-                  
-                  <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <BookOpen className="w-4 h-4" />
-                      {program.courseCount || 0} {program.courseCount === 1 ? 'course' : 'courses'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      Self-paced
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Award className="w-4 h-4" />
-                      Certificate
-                    </span>
-                  </div>
-                  
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-100">
-                    <div>
-                      <span className="text-sm text-slate-500">Program Price</span>
-                      <p className="text-2xl font-bold text-slate-900" data-testid={`text-program-price-${program.id}`}>
-                        KES {program.price.toLocaleString()}
-                      </p>
+                    
+                    <h2 className="text-2xl font-bold text-slate-900 mb-3 group-hover:text-primary transition-colors" data-testid={`text-program-title-${program.id}`}>
+                      {program.title}
+                    </h2>
+                    
+                    <p className="text-slate-600 mb-6 line-clamp-3">
+                      {program.description}
+                    </p>
+                    
+                    <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <BookOpen className="w-4 h-4" />
+                        {program.courseCount || 0} {program.courseCount === 1 ? 'course' : 'courses'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        Self-paced
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Award className="w-4 h-4" />
+                        Certificate
+                      </span>
                     </div>
-                    <Link href={`/programs/${program.slug}`}>
+                    
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-100">
+                      <div>
+                        <span className="text-sm text-slate-500">Program Price</span>
+                        <p className="text-2xl font-bold text-slate-900" data-testid={`text-program-price-${program.id}`}>
+                          KES {program.price.toLocaleString()}
+                        </p>
+                      </div>
                       <Button className="group/btn" data-testid={`button-view-program-${program.id}`}>
                         View Program
                         <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                       </Button>
-                    </Link>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              </Link>
             ))}
 
             {programs?.length === 0 && (
