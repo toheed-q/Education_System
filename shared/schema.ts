@@ -132,15 +132,19 @@ export const tutorProfiles = pgTable("tutor_profiles", {
 export const bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull().references(() => users.id),
-  tutorId: integer("tutor_id").notNull().references(() => users.id), // References USER id of tutor
+  tutorId: integer("tutor_id").notNull().references(() => users.id),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
   status: bookingStatusEnum("status").default("pending"),
   sessionType: sessionTypeEnum("session_type").default("online"),
-  location: text("location"), // For physical sessions
+  location: text("location"),
   pricePaid: integer("price_paid_kes").notNull(),
-  meetingLink: text("meeting_link"), // For online sessions
+  meetingLink: text("meeting_link"),
   paystackReference: text("paystack_reference"),
+  subject: text("subject"),
+  gradeLevel: text("grade_level"),
+  topic: text("topic"),
+  sessionNotes: text("session_notes"),
 });
 
 export const bookingPaymentIntents = pgTable("booking_payment_intents", {
@@ -156,6 +160,10 @@ export const bookingPaymentIntents = pgTable("booking_payment_intents", {
   tutorShareKes: integer("tutor_share_kes").notNull(), // 75% for tutor
   paystackReference: text("paystack_reference").notNull().unique(),
   status: paymentIntentStatusEnum("status").default("initiated"),
+  subject: text("subject"),
+  gradeLevel: text("grade_level"),
+  topic: text("topic"),
+  sessionNotes: text("session_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -469,7 +469,7 @@ Only respond with the description text, nothing else.`
     }
     
     try {
-      const { tutorId, startTime, endTime, sessionType, location } = req.body;
+      const { tutorId, startTime, endTime, sessionType, location, subject, gradeLevel, topic, sessionNotes } = req.body;
       const user = req.user as any;
       
       // Validate user is a student
@@ -539,6 +539,10 @@ Only respond with the description text, nothing else.`
         platformFeeKes,
         tutorShareKes,
         paystackReference: reference,
+        subject: subject || null,
+        gradeLevel: gradeLevel || null,
+        topic: topic || null,
+        sessionNotes: sessionNotes || null,
       });
       
       // Initialize Paystack transaction
@@ -627,6 +631,10 @@ Only respond with the description text, nothing else.`
         location: intent.location,
         pricePaid: intent.amountKes,
         paystackReference: reference,
+        subject: intent.subject,
+        gradeLevel: intent.gradeLevel,
+        topic: intent.topic,
+        sessionNotes: intent.sessionNotes,
       });
 
       // Notify tutor about new booking

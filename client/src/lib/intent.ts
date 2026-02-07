@@ -9,6 +9,9 @@ export interface BookingIntent {
   selectedDate: string;
   selectedTime: string;
   selectedSubject?: string;
+  gradeLevel?: string;
+  topic?: string;
+  sessionNotes?: string;
   sessionRate: number;
   timestamp: number;
 }

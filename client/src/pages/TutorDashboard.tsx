@@ -167,7 +167,7 @@ export default function TutorDashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Earnings Overview</CardTitle>
-              <CardDescription>Your earnings breakdown</CardDescription>
+              <CardDescription>Your tutoring income summary</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -178,26 +178,11 @@ export default function TutorDashboard() {
                     </div>
                     <div>
                       <p className="font-medium text-slate-900">Gross Earnings</p>
-                      <p className="text-sm text-slate-500">Before fees</p>
+                      <p className="text-sm text-slate-500">From completed sessions</p>
                     </div>
                   </div>
                   <p className="text-lg font-bold text-slate-900">
                     KES {totalEarnings.toLocaleString()}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-red-900">Platform Fee (25%)</p>
-                      <p className="text-sm text-red-600">Service charge</p>
-                    </div>
-                  </div>
-                  <p className="text-lg font-bold text-red-900">
-                    - KES {platformFee.toLocaleString()}
                   </p>
                 </div>
 
@@ -207,8 +192,8 @@ export default function TutorDashboard() {
                       <Wallet className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="font-medium text-green-900">Net Earnings</p>
-                      <p className="text-sm text-green-600">Your take-home</p>
+                      <p className="font-medium text-green-900">Available for Withdrawal</p>
+                      <p className="text-sm text-green-600">Your current balance</p>
                     </div>
                   </div>
                   <p className="text-xl font-bold text-green-900">
@@ -216,10 +201,12 @@ export default function TutorDashboard() {
                   </p>
                 </div>
 
-                <Button className="w-full mt-4" disabled={netEarnings <= 0} data-testid="button-withdraw">
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Request Withdrawal
-                </Button>
+                <Link href="/tutor/earnings">
+                  <Button className="w-full mt-4" data-testid="button-view-earnings">
+                    <Wallet className="w-4 h-4 mr-2" />
+                    View Earnings Details
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>

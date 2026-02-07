@@ -46,6 +46,9 @@ export default function TutorProfile() {
   const [sessionType, setSessionType] = useState<"online" | "physical">("online");
   const [location, setLocation] = useState<string>("");
   const [selectedSubject, setSelectedSubject] = useState<string>("");
+  const [gradeLevel, setGradeLevel] = useState<string>("");
+  const [topic, setTopic] = useState<string>("");
+  const [sessionNotes, setSessionNotes] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
@@ -59,6 +62,9 @@ export default function TutorProfile() {
       setSelectedDate(bi.selectedDate);
       setSelectedTime(bi.selectedTime);
       if (bi.selectedSubject) setSelectedSubject(bi.selectedSubject);
+      if (bi.gradeLevel) setGradeLevel(bi.gradeLevel);
+      if (bi.topic) setTopic(bi.topic);
+      if (bi.sessionNotes) setSessionNotes(bi.sessionNotes);
       setBookingOpen(true);
       clearIntent();
     } else if (continueMessage && intent?.type === "message") {
@@ -93,7 +99,7 @@ export default function TutorProfile() {
   });
 
   const initiatePayment = useMutation({
-    mutationFn: async (data: { tutorId: number; startTime: string; endTime: string; sessionType: string; location?: string }) => {
+    mutationFn: async (data: { tutorId: number; startTime: string; endTime: string; sessionType: string; location?: string; subject?: string; gradeLevel?: string; topic?: string; sessionNotes?: string }) => {
       const response = await apiRequest("POST", "/api/bookings/initiate-payment", data);
       return response.json();
     },
@@ -157,6 +163,10 @@ export default function TutorProfile() {
         endTime: endTime.toISOString(),
         sessionType,
         location: sessionType === "physical" ? location.trim() : undefined,
+        subject: selectedSubject || undefined,
+        gradeLevel: gradeLevel.trim() || undefined,
+        topic: topic.trim() || undefined,
+        sessionNotes: sessionNotes.trim() || undefined,
       });
       
       // Step 2: Open Paystack popup
@@ -262,12 +272,12 @@ export default function TutorProfile() {
                     Professional Skills Verified
                   </span>
                 )}
-                {tutor.higherEducationStatus === "pending" && tutor.higherEducationStatus !== "approved" && (
+                {tutor.higherEducationStatus === "pending" && (
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
                     Higher Ed Pending
                   </span>
                 )}
-                {tutor.professionalSkillsStatus === "pending" && tutor.professionalSkillsStatus !== "approved" && (
+                {tutor.professionalSkillsStatus === "pending" && (
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
                     Professional Skills Pending
                   </span>
@@ -340,6 +350,42 @@ export default function TutorProfile() {
                           <option key={i} value={subject}>{subject}</option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Grade / Level (optional)</label>
+                      <input
+                        type="text"
+                        value={gradeLevel}
+                        onChange={(e) => setGradeLevel(e.target.value)}
+                        placeholder="e.g., Form 3, Year 2, Beginner"
+                        className="w-full p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        data-testid="input-booking-grade"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Topic (optional)</label>
+                      <input
+                        type="text"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="e.g., Quadratic Equations, Organic Chemistry"
+                        className="w-full p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        data-testid="input-booking-topic"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Session Instructions (optional)</label>
+                      <textarea
+                        value={sessionNotes}
+                        onChange={(e) => setSessionNotes(e.target.value)}
+                        placeholder="Any details to help the tutor prepare, e.g., areas you're struggling with, specific goals for the session"
+                        rows={3}
+                        className="w-full p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                        data-testid="input-booking-notes"
+                      />
                     </div>
 
                     <div>
@@ -467,6 +513,9 @@ export default function TutorProfile() {
                             selectedDate,
                             selectedTime,
                             selectedSubject,
+                            gradeLevel: gradeLevel || undefined,
+                            topic: topic || undefined,
+                            sessionNotes: sessionNotes || undefined,
                             sessionRate: tutor.hourlyRate,
                             timestamp: Date.now(),
                           });
