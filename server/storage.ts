@@ -67,6 +67,7 @@ export interface IStorage {
   // Enrollments
   isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean>;
   createEnrollment(data: { userId: number; courseId?: number; programId?: number }): Promise<any>;
+  getUserEnrollments(userId: number): Promise<any[]>;
   getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any>;
 
   // Enrollment Payment Intents
@@ -454,6 +455,28 @@ export class DatabaseStorage implements IStorage {
       .where(eq(enrollmentPaymentIntents.paystackReference, paystackReference))
       .returning();
     return updated;
+  }
+
+  async getUserEnrollments(userId: number): Promise<any[]> {
+    const userEnrollments = await db.select().from(enrollments)
+      .where(eq(enrollments.userId, userId))
+      .orderBy(desc(enrollments.enrolledAt));
+    
+    const result = [];
+    for (const enrollment of userEnrollments) {
+      let course = null;
+      let program = null;
+      if (enrollment.courseId) {
+        const [c] = await db.select().from(courses).where(eq(courses.id, enrollment.courseId));
+        course = c || null;
+      }
+      if (enrollment.programId) {
+        const [p] = await db.select().from(programs).where(eq(programs.id, enrollment.programId));
+        program = p || null;
+      }
+      result.push({ ...enrollment, course, program });
+    }
+    return result;
   }
 
   async getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any> {

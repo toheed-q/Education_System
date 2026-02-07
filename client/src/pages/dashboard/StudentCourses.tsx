@@ -58,7 +58,7 @@ export default function StudentCourses() {
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-3">
                     <BookOpen className="w-6 h-6 text-primary" />
                   </div>
-                  <CardTitle className="text-lg">{enrollment.course?.title || "Course"}</CardTitle>
+                  <CardTitle className="text-lg">{enrollment.course?.title || enrollment.program?.title || "Course"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -69,7 +69,7 @@ export default function StudentCourses() {
                       </div>
                       <Progress value={enrollment.progress || 0} />
                     </div>
-                    <Link href={`/courses/${enrollment.courseId}`}>
+                    <Link href={enrollment.course ? `/courses/${enrollment.course.slug || enrollment.courseId}` : `/programs/${enrollment.program?.slug || enrollment.programId}`}>
                       <Button className="w-full" data-testid={`button-continue-${enrollment.id}`}>
                         <Play className="w-4 h-4 mr-2" />
                         Continue Learning

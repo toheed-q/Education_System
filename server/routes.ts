@@ -345,6 +345,19 @@ Only respond with the description text, nothing else.`
     }
   });
 
+  // Enrollments - Get user's enrollments
+  app.get("/api/enrollments", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+    try {
+      const userEnrollments = await storage.getUserEnrollments(userId);
+      res.json(userEnrollments);
+    } catch (err) {
+      console.error("Error fetching enrollments:", err);
+      res.status(500).json({ message: "Failed to fetch enrollments" });
+    }
+  });
+
   // Enrollments - Initiate Payment
   app.post("/api/enrollments/initiate-payment", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });

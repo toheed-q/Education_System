@@ -140,7 +140,7 @@ export default function StudentDashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-900 truncate">
-                          {enrollment.course?.title || "Course"}
+                          {enrollment.course?.title || enrollment.program?.title || "Course"}
                         </p>
                         <Progress value={enrollment.progress || 0} className="h-2 mt-2" />
                         <p className="text-xs text-slate-500 mt-1">{enrollment.progress || 0}% complete</p>
