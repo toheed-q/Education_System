@@ -32,9 +32,9 @@ export function Navigation() {
 
   const studentLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/my-courses", label: "My Courses", icon: BookOpen },
-    { href: "/my-bookings", label: "Bookings", icon: Calendar },
-    { href: "/messages", label: "Messages", icon: MessageSquare },
+    { href: "/dashboard/courses", label: "My Courses", icon: BookOpen },
+    { href: "/dashboard/bookings", label: "Bookings", icon: Calendar },
+    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   ];
 
   const tutorLinks = [
