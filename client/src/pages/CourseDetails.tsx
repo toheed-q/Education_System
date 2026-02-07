@@ -239,18 +239,19 @@ export default function CourseDetails() {
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/enrollments", { courseId });
+      const response = await apiRequest("POST", "/api/enrollments/initiate-payment", { courseId });
+      return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Successfully enrolled!" });
-      queryClient.invalidateQueries({ queryKey: ["/api/courses/slug", slug] });
-      queryClient.invalidateQueries({ queryKey: ["/api/courses", courseId, "progress"] });
+    onSuccess: (data: { authorizationUrl: string; reference: string }) => {
+      sessionStorage.setItem("enrollment_return_slug", `/courses/${slug}`);
+      window.location.href = data.authorizationUrl;
     },
     onError: (err: any) => {
       if (err.message === "Already enrolled") {
         toast({ title: "You are already enrolled in this course" });
+        queryClient.invalidateQueries({ queryKey: ["/api/courses/slug", slug] });
       } else {
-        toast({ title: "Failed to enroll. Please try again.", variant: "destructive" });
+        toast({ title: "Failed to initiate payment. Please try again.", variant: "destructive" });
       }
     },
   });
@@ -478,8 +479,10 @@ export default function CourseDetails() {
                   className="w-full mb-4" 
                   size="lg"
                   data-testid="button-enroll-sidebar"
+                  onClick={handleEnroll}
+                  disabled={enrollMutation.isPending}
                 >
-                  Enroll Now
+                  {enrollMutation.isPending ? "Processing..." : `Enroll Now - KES ${course.price.toLocaleString()}`}
                 </Button>
                 
 

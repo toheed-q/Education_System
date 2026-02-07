@@ -2,11 +2,11 @@ import { db } from "./db";
 import {
   users, programs, courses, courseWeeks, courseContent, quizzes, quizQuestions, quizAttempts,
   tutorProfiles, bookings, reviews, messages, enrollments, certificates, verificationRequests, withdrawals,
-  bookingPaymentIntents, notifications,
+  bookingPaymentIntents, enrollmentPaymentIntents, notifications,
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
-  type InsertQuizAttempt, type BookingPaymentIntent, type VerificationRequest, type Notification, type InsertNotification
+  type InsertQuizAttempt, type BookingPaymentIntent, type EnrollmentPaymentIntent, type VerificationRequest, type Notification, type InsertNotification
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -68,6 +68,11 @@ export interface IStorage {
   isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean>;
   createEnrollment(data: { userId: number; courseId?: number; programId?: number }): Promise<any>;
   getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any>;
+
+  // Enrollment Payment Intents
+  createEnrollmentPaymentIntent(data: { userId: number; courseId?: number; programId?: number; amountKes: number; paystackReference: string }): Promise<EnrollmentPaymentIntent>;
+  getEnrollmentPaymentIntent(paystackReference: string): Promise<EnrollmentPaymentIntent | undefined>;
+  markEnrollmentPaymentIntentPaid(paystackReference: string): Promise<EnrollmentPaymentIntent | undefined>;
 
   // Quizzes
   getQuiz(id: number): Promise<Quiz | undefined>;
@@ -424,6 +429,31 @@ export class DatabaseStorage implements IStorage {
       programId: data.programId,
     }).returning();
     return enrollment;
+  }
+
+  async createEnrollmentPaymentIntent(data: { userId: number; courseId?: number; programId?: number; amountKes: number; paystackReference: string }): Promise<EnrollmentPaymentIntent> {
+    const [intent] = await db.insert(enrollmentPaymentIntents).values({
+      userId: data.userId,
+      courseId: data.courseId,
+      programId: data.programId,
+      amountKes: data.amountKes,
+      paystackReference: data.paystackReference,
+    }).returning();
+    return intent;
+  }
+
+  async getEnrollmentPaymentIntent(paystackReference: string): Promise<EnrollmentPaymentIntent | undefined> {
+    const [intent] = await db.select().from(enrollmentPaymentIntents)
+      .where(eq(enrollmentPaymentIntents.paystackReference, paystackReference));
+    return intent;
+  }
+
+  async markEnrollmentPaymentIntentPaid(paystackReference: string): Promise<EnrollmentPaymentIntent | undefined> {
+    const [updated] = await db.update(enrollmentPaymentIntents)
+      .set({ status: "paid" })
+      .where(eq(enrollmentPaymentIntents.paystackReference, paystackReference))
+      .returning();
+    return updated;
   }
 
   async getEnrollmentForUser(userId: number, courseId?: number, programId?: number): Promise<any> {

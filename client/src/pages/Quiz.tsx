@@ -21,6 +21,8 @@ interface QuizData {
   passScorePercent: number;
   isFinalExam: boolean;
   weekId: number;
+  courseSlug: string;
+  courseId: number;
   questions: Question[];
 }
 
@@ -61,6 +63,13 @@ export default function Quiz() {
       setResult(data);
       setSubmitted(true);
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courses"] });
+      if (quiz?.courseSlug) {
+        queryClient.invalidateQueries({ queryKey: ["/api/courses/slug", quiz.courseSlug] });
+      }
+      if (quiz?.courseId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/courses", quiz.courseId, "progress"] });
+      }
     },
   });
 
@@ -108,10 +117,10 @@ export default function Quiz() {
       
       <div className="bg-white border-b border-slate-100 pt-20 pb-8">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link href="/courses">
+          <Link href={quiz?.courseSlug ? `/courses/${quiz.courseSlug}` : "/courses"}>
             <button className="flex items-center gap-2 text-slate-500 hover:text-slate-700 mb-4" data-testid="button-back">
               <ArrowLeft className="w-4 h-4" />
-              Back to Courses
+              Back to Course
             </button>
           </Link>
           
@@ -181,7 +190,7 @@ export default function Quiz() {
                   Try Again
                 </Button>
               )}
-              <Link href="/courses">
+              <Link href={quiz.courseSlug ? `/courses/${quiz.courseSlug}` : "/courses"}>
                 <Button data-testid="button-continue">Continue Learning</Button>
               </Link>
             </div>

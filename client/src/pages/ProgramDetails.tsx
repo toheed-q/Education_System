@@ -23,17 +23,19 @@ export default function ProgramDetails() {
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/enrollments", { programId: program?.id });
+      const response = await apiRequest("POST", "/api/enrollments/initiate-payment", { programId: program?.id });
+      return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Successfully enrolled!" });
-      queryClient.invalidateQueries({ queryKey: ["/api/programs/slug", slug] });
+    onSuccess: (data: { authorizationUrl: string; reference: string }) => {
+      sessionStorage.setItem("enrollment_return_slug", `/programs/${slug}`);
+      window.location.href = data.authorizationUrl;
     },
     onError: (err: any) => {
       if (err.message === "Already enrolled") {
         toast({ title: "You are already enrolled in this program" });
+        queryClient.invalidateQueries({ queryKey: ["/api/programs/slug", slug] });
       } else {
-        toast({ title: "Failed to enroll. Please try again.", variant: "destructive" });
+        toast({ title: "Failed to initiate payment. Please try again.", variant: "destructive" });
       }
     },
   });

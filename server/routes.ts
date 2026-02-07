@@ -7,7 +7,9 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import argon2 from "argon2";
-import { users } from "@shared/schema";
+import { users, courseWeeks as courseWeeksTable } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { generateSlug } from "@shared/utils";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import OpenAI from "openai";
@@ -343,39 +345,163 @@ Only respond with the description text, nothing else.`
     }
   });
 
-  // Enrollments
-  app.post(api.enrollments.create.path, async (req, res) => {
+  // Enrollments - Initiate Payment
+  app.post("/api/enrollments/initiate-payment", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(500).json({ message: "Payment not configured" });
+    }
     
     const user = req.user as any;
     
     try {
-      const input = api.enrollments.create.input.parse(req.body);
+      const { courseId, programId } = req.body;
+      
+      if (!courseId && !programId) {
+        return res.status(400).json({ message: "courseId or programId required" });
+      }
       
       // Check if already enrolled
-      const existingEnrollment = await storage.getEnrollmentForUser(
-        user.id, 
-        input.courseId, 
-        input.programId
-      );
-      
+      const existingEnrollment = await storage.getEnrollmentForUser(user.id, courseId, programId);
       if (existingEnrollment) {
         return res.status(400).json({ message: "Already enrolled" });
       }
       
-      const enrollment = await storage.createEnrollment({
+      // Get price from the course or program
+      let amount = 0;
+      let itemTitle = "";
+      if (courseId) {
+        const course = await storage.getCourse(courseId);
+        if (!course) return res.status(404).json({ message: "Course not found" });
+        amount = course.price;
+        itemTitle = course.title;
+      } else if (programId) {
+        const program = await storage.getProgram(programId);
+        if (!program) return res.status(404).json({ message: "Program not found" });
+        amount = program.price;
+        itemTitle = program.title;
+      }
+      
+      // Generate unique reference
+      const reference = `ENRL-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Get user email
+      const studentUser = await storage.getUser(user.id);
+      if (!studentUser) return res.status(400).json({ message: "User not found" });
+      
+      // Create enrollment payment intent
+      const intent = await storage.createEnrollmentPaymentIntent({
         userId: user.id,
-        courseId: input.courseId,
-        programId: input.programId,
+        courseId: courseId || undefined,
+        programId: programId || undefined,
+        amountKes: amount,
+        paystackReference: reference,
       });
       
-      res.status(201).json(enrollment);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        res.status(400).json({ message: err.errors[0].message });
-      } else {
-        res.status(400).json({ message: "Failed to create enrollment" });
+      // Initialize Paystack transaction
+      const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: studentUser.email,
+          amount: amount * 100,
+          currency: "KES",
+          reference,
+          callback_url: `${req.protocol}://${req.get('host')}/enrollment/callback`,
+          metadata: {
+            intentId: intent.id,
+            courseId,
+            programId,
+            userId: user.id,
+            itemTitle,
+          },
+        }),
+      });
+      
+      const paystackData = await paystackResponse.json();
+      
+      if (!paystackData.status) {
+        return res.status(400).json({ message: paystackData.message || "Payment initialization failed" });
       }
+      
+      res.json({
+        reference,
+        authorizationUrl: paystackData.data.authorization_url,
+        accessCode: paystackData.data.access_code,
+      });
+    } catch (err) {
+      console.error("Enrollment payment initiation error:", err);
+      res.status(500).json({ message: "Failed to initiate payment" });
+    }
+  });
+
+  // Enrollments - Verify Payment and Create Enrollment
+  // Does not require authentication - user may be redirected from Paystack
+  // Security: verification is tied to Paystack reference which was created by authenticated user
+  app.post("/api/enrollments/verify-payment", async (req, res) => {
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(500).json({ message: "Payment not configured" });
+    }
+    
+    try {
+      const { reference } = req.body;
+      if (!reference) {
+        return res.status(400).json({ message: "Payment reference required" });
+      }
+      
+      // Get the enrollment payment intent first
+      const intent = await storage.getEnrollmentPaymentIntent(reference);
+      if (!intent) {
+        return res.status(404).json({ message: "Payment intent not found" });
+      }
+      
+      if (intent.status === "paid") {
+        return res.json({ success: true, message: "Payment already processed" });
+      }
+      
+      // Verify with Paystack
+      const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        headers: {
+          "Authorization": `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
+      });
+      
+      const verifyData = await verifyResponse.json();
+      
+      if (!verifyData.status || verifyData.data.status !== "success") {
+        return res.status(400).json({ message: "Payment verification failed" });
+      }
+      
+      // Mark intent as paid
+      await storage.markEnrollmentPaymentIntentPaid(reference);
+      
+      // Check if already enrolled (race condition prevention)
+      const existingEnrollment = await storage.getEnrollmentForUser(intent.userId, intent.courseId ?? undefined, intent.programId ?? undefined);
+      if (existingEnrollment) {
+        return res.json({ success: true, enrollment: existingEnrollment, message: "Already enrolled" });
+      }
+      
+      // Create the enrollment
+      const enrollment = await storage.createEnrollment({
+        userId: intent.userId,
+        courseId: intent.courseId ?? undefined,
+        programId: intent.programId ?? undefined,
+      });
+      
+      res.json({
+        success: true,
+        enrollment,
+        message: "Payment verified and enrollment created",
+      });
+    } catch (err) {
+      console.error("Enrollment payment verification error:", err);
+      res.status(500).json({ message: "Failed to verify payment" });
     }
   });
 
@@ -1062,7 +1188,17 @@ Only respond with the description text, nothing else.`
       options: q.options as string[],
     }));
     
-    res.json({ ...quiz, questions: questionsWithoutAnswers });
+    // Get the course info for this quiz's week
+    const week = (await db.select().from(courseWeeksTable).where(eq(courseWeeksTable.id, quiz.weekId)))[0];
+    let courseSlug = "";
+    let courseId = 0;
+    if (week) {
+      const course = await storage.getCourse(week.courseId);
+      courseSlug = course?.slug || "";
+      courseId = week.courseId;
+    }
+    
+    res.json({ ...quiz, questions: questionsWithoutAnswers, courseSlug, courseId });
   });
 
   app.post("/api/quizzes/:id/submit", async (req, res) => {

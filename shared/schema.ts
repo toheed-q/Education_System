@@ -167,6 +167,17 @@ export const bookingPaymentIntents = pgTable("booking_payment_intents", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const enrollmentPaymentIntents = pgTable("enrollment_payment_intents", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  courseId: integer("course_id").references(() => courses.id),
+  programId: integer("program_id").references(() => programs.id),
+  amountKes: integer("amount_kes").notNull(),
+  paystackReference: text("paystack_reference").notNull().unique(),
+  status: paymentIntentStatusEnum("enrollment_payment_status").default("initiated"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const reviews = pgTable("reviews", {
   id: serial("id").primaryKey(),
   bookingId: integer("booking_id").notNull().references(() => bookings.id),
@@ -311,6 +322,7 @@ export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type BookingPaymentIntent = typeof bookingPaymentIntents.$inferSelect;
 export type InsertPaymentIntent = z.infer<typeof insertPaymentIntentSchema>;
+export type EnrollmentPaymentIntent = typeof enrollmentPaymentIntents.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;

@@ -32,6 +32,7 @@ import AdminVerifications from "@/pages/admin/AdminVerifications";
 import AdminAnalytics from "@/pages/admin/AdminAnalytics";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLogs from "@/pages/admin/AdminLogs";
+import EnrollmentCallback from "@/pages/EnrollmentCallback";
 
 function Router() {
   return (
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/tutors/:id" component={TutorProfile} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/enrollment/callback" component={EnrollmentCallback} />
       
       {/* Student dashboard routes */}
       <Route path="/dashboard" component={StudentDashboard} />
