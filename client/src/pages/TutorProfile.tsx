@@ -459,7 +459,7 @@ export default function TutorProfile() {
                         <Button className="w-full" onClick={() => {
                           saveIntent({
                             type: "booking",
-                            tutorId: tutor.user.id,
+                            tutorId: tutor.id,
                             tutorName: tutor.user.name,
                             sessionType,
                             location: sessionType === "physical" ? location : undefined,
@@ -513,7 +513,7 @@ export default function TutorProfile() {
                         <Button onClick={() => {
                           saveIntent({
                             type: "message",
-                            tutorId: tutor.user.id,
+                            tutorId: tutor.id,
                             tutorName: tutor.user.name,
                             timestamp: Date.now(),
                           });
