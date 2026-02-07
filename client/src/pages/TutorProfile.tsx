@@ -152,7 +152,7 @@ export default function TutorProfile() {
     try {
       // Step 1: Initialize payment with backend
       const paymentData = await initiatePayment.mutateAsync({
-        tutorId: tutor.user.id,
+        tutorId: tutor.id,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         sessionType,
