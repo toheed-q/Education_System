@@ -1019,7 +1019,6 @@ Only respond with the description text, nothing else.`
       password,
       name: "Esther Njane",
       role: "super_admin",
-      isVerified: true
     });
 
     // Additional Admin
@@ -1028,7 +1027,6 @@ Only respond with the description text, nothing else.`
       password,
       name: "Admin User",
       role: "admin",
-      isVerified: true
     });
 
     // Tutors
@@ -1036,58 +1034,72 @@ Only respond with the description text, nothing else.`
     const tutorMain = await storage.createUser({
       email: "tutor@lernentech.com",
       password,
-      name: "Test Tutor",
+      name: "Jane Tutor",
       role: "tutor",
-      isVerified: true
     });
-    await storage.createTutorProfile({
+    const tutorMainProfile = await storage.createTutorProfile({
       userId: tutorMain.id,
       bio: "Experienced multi-subject tutor with expertise in various academic disciplines. Available for online and in-person sessions.",
       hourlyRate: 1500,
-      subjects: ["Mathematics", "English", "Science"]
+      subjects: ["Mathematics", "English", "Physics", "Computer Science", "Data Analysis"]
     });
+    await storage.updateTutorCategoryStatus(tutorMainProfile.id, "school_tutoring", "approved");
+    await storage.updateTutorCategoryStatus(tutorMainProfile.id, "higher_education", "approved");
+    await storage.updateTutorCategoryStatus(tutorMainProfile.id, "professional_skills", "approved");
+    await storage.updateTutorCategorySubjects(tutorMainProfile.id, "school_tutoring", ["Mathematics", "Physics", "English"]);
+    await storage.updateTutorCategorySubjects(tutorMainProfile.id, "higher_education", ["Computer Science", "Data Science & Analytics"]);
+    await storage.updateTutorCategorySubjects(tutorMainProfile.id, "professional_skills", ["Data Analysis", "Project Management"]);
+    await storage.updateTutorVerificationStatus(tutorMainProfile.id, "approved");
 
     const tutor1 = await storage.createUser({
       email: "james.mwangi@lernentech.com",
       password,
       name: "James Mwangi",
       role: "tutor",
-      isVerified: true
     });
-    await storage.createTutorProfile({
+    const tutor1Profile = await storage.createTutorProfile({
       userId: tutor1.id,
       bio: "Experienced Mathematics and Physics tutor with 8 years of teaching experience. Specializing in CBC curriculum and KCSE preparation.",
       hourlyRate: 1500,
       subjects: ["Mathematics", "Physics", "Science and Technology"]
     });
+    await storage.updateTutorCategoryStatus(tutor1Profile.id, "school_tutoring", "approved");
+    await storage.updateTutorCategorySubjects(tutor1Profile.id, "school_tutoring", ["Mathematics", "Physics", "Science & Technology"]);
+    await storage.updateTutorVerificationStatus(tutor1Profile.id, "approved");
 
     const tutor2 = await storage.createUser({
       email: "sarah.wanjiru@lernentech.com",
       password,
       name: "Sarah Wanjiru",
       role: "tutor",
-      isVerified: true
     });
-    await storage.createTutorProfile({
+    const tutor2Profile = await storage.createTutorProfile({
       userId: tutor2.id,
       bio: "Certified English and Kiswahili language expert. Cambridge-trained with focus on creative writing and exam techniques.",
       hourlyRate: 1200,
       subjects: ["English", "Kiswahili", "Creative Arts"]
     });
+    await storage.updateTutorCategoryStatus(tutor2Profile.id, "school_tutoring", "approved");
+    await storage.updateTutorCategorySubjects(tutor2Profile.id, "school_tutoring", ["English", "Kiswahili", "Creative Arts"]);
+    await storage.updateTutorVerificationStatus(tutor2Profile.id, "approved");
 
     const tutor3 = await storage.createUser({
       email: "david.ochieng@lernentech.com",
       password,
       name: "David Ochieng",
       role: "tutor",
-      isVerified: true
     });
-    await storage.createTutorProfile({
+    const tutor3Profile = await storage.createTutorProfile({
       userId: tutor3.id,
       bio: "Software Developer turned educator. Teaching programming, data analysis, and computer science fundamentals.",
       hourlyRate: 2000,
       subjects: ["Computer Science", "Web Development", "Programming Fundamentals", "Excel for Analytics"]
     });
+    await storage.updateTutorCategoryStatus(tutor3Profile.id, "higher_education", "approved");
+    await storage.updateTutorCategoryStatus(tutor3Profile.id, "professional_skills", "approved");
+    await storage.updateTutorCategorySubjects(tutor3Profile.id, "higher_education", ["Computer Science", "Software Engineering"]);
+    await storage.updateTutorCategorySubjects(tutor3Profile.id, "professional_skills", ["Web Development", "Programming Fundamentals", "Excel for Analytics"]);
+    await storage.updateTutorVerificationStatus(tutor3Profile.id, "approved");
 
     // Student
     await storage.createUser({
@@ -1095,7 +1107,6 @@ Only respond with the description text, nothing else.`
       password,
       name: "John Kamau",
       role: "student",
-      isVerified: true
     });
     
     console.log("Users seeded!");

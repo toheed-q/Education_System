@@ -1,0 +1,156 @@
+2. What the Earnings Page Should Show (Tutor-facing)
+Earnings Summary Cards (Top)
+
+Show only these two cards:
+
+Gross Earnings
+
+Label: “Gross Earnings”
+
+Subtext: “Total earnings from completed sessions”
+
+Value: KES X
+
+Tooltip or info icon (optional):
+
+“Gross earnings are subject to a standard platform management fee as outlined in the Tutor Terms.”
+
+Available for Withdrawal
+
+Label: “Available for Withdrawal”
+
+Subtext: “Amount you can withdraw”
+
+Value: KES Y
+
+Remove entirely from this view:
+
+Platform Fee (25%) card
+
+Any red or negative value tied to fees
+
+Any line item that visually looks like a penalty
+
+Earnings History Section
+
+Show session-level earnings as gross amounts
+
+No per-session fee breakdown here
+
+Keep this view performance-oriented, not accounting-oriented
+
+Where the 25% Fee Is Communicated (still compliant)
+
+You still communicate the fee, just not as a constant visual tax.
+
+Place it in one or more of these:
+
+Terms & Conditions
+
+Already signed
+
+This is the legal anchor
+
+Withdraw Flow (Recommended)
+
+When tutor clicks “Request Withdrawal”
+
+Show a simple breakdown:
+
+Gross earnings
+
+Platform management fee (25%)
+
+Net payout
+
+This is the right moment for financial clarity
+
+Help / FAQ
+
+“How do earnings work?”
+
+One clear sentence:
+
+“LernenTech applies a 25% platform management fee to gross earnings to cover student acquisition, payments, support, and platform operations.”
+
+3. Notifications Behaviour (Very Important UX Fix)
+
+You’re also right here. A notification should only be “new” once.
+
+Expected Behaviour
+
+Notification badge count reflects unread notifications only
+
+Once a user opens the notifications panel:
+
+All currently visible notifications are marked as read
+
+The badge count clears immediately
+
+Badge should only reappear when:
+
+A brand new notification is created after that moment
+
+What Should NOT Happen
+
+Old notifications reappearing as “new”
+
+Badge persisting after user has viewed notifications
+
+Badge resetting on page refresh
+
+4. Exact Instructions for the Agent / Developer
+
+You can give them this verbatim.
+
+A. Earnings UI Changes
+
+Remove the “Platform Fee (25%)” card from the tutor earnings dashboard.
+
+Display only:
+
+Gross Earnings
+
+Available for Withdrawal
+
+Ensure gross earnings are not visually paired with negative or red indicators.
+
+Add a small info tooltip or footnote text near Gross Earnings:
+
+“Gross earnings are subject to a standard platform management fee as outlined in the Tutor Terms.”
+
+B. Fee Handling Logic
+
+Keep the 25% platform fee logic unchanged in backend calculations.
+
+Apply the fee:
+
+At withdrawal request
+
+In payout history records
+
+Do not surface fee deductions in the main dashboard summary.
+
+C. Notifications Logic
+
+Track notification state using a read / unread flag per notification.
+
+When a tutor opens the notifications panel:
+
+Mark all currently unread notifications as read
+
+Immediately clear the notification badge count.
+
+Only increment the badge when:
+
+A new notification is created after the last read timestamp.
+
+Do not re-mark notifications as unread on refresh, navigation, or login.
+
+5. Final Product Principle (worth stating internally)
+
+The tutor dashboard is a motivation surface, not an accounting ledger.
+
+Performance first.
+Accounting second.
+Transparency at the right moment.
