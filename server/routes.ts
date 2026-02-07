@@ -413,6 +413,52 @@ Only respond with the description text, nothing else.`
     }
   });
 
+  // Update tutor's own profile
+  app.patch("/api/tutors/my-profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    if (user.role !== "tutor") {
+      return res.status(403).json({ message: "Only tutors can update their profile" });
+    }
+    
+    try {
+      const profile = await storage.getTutorProfileByUserId(user.id);
+      if (!profile) {
+        return res.status(404).json({ message: "Tutor profile not found" });
+      }
+      
+      const { bio, hourlyRate, schoolTutoringSubjects, higherEducationSubjects, professionalSkillsSubjects } = req.body;
+      
+      const updateData: Record<string, any> = {};
+      if (bio !== undefined && typeof bio === "string") updateData.bio = bio;
+      if (hourlyRate !== undefined) {
+        const rate = parseInt(hourlyRate);
+        if (isNaN(rate) || rate < 0) {
+          return res.status(400).json({ message: "Invalid hourly rate" });
+        }
+        updateData.hourlyRate = rate;
+      }
+      if (Array.isArray(schoolTutoringSubjects)) updateData.schoolTutoringSubjects = schoolTutoringSubjects;
+      if (Array.isArray(higherEducationSubjects)) updateData.higherEducationSubjects = higherEducationSubjects;
+      if (Array.isArray(professionalSkillsSubjects)) updateData.professionalSkillsSubjects = professionalSkillsSubjects;
+      
+      // Also update the legacy subjects array with all combined subjects
+      const allSubjects = [
+        ...(schoolTutoringSubjects || profile.schoolTutoringSubjects || []),
+        ...(higherEducationSubjects || profile.higherEducationSubjects || []),
+        ...(professionalSkillsSubjects || profile.professionalSkillsSubjects || []),
+      ];
+      updateData.subjects = allSubjects;
+      
+      const updated = await storage.updateTutorProfile(profile.id, updateData);
+      res.json(updated);
+    } catch (err) {
+      console.error("Update tutor profile error:", err);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
   // Bookings - Initiate Payment (step 1 of booking flow)
   app.post("/api/bookings/initiate-payment", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });

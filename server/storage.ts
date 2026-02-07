@@ -79,6 +79,7 @@ export interface IStorage {
   updateTutorVerificationStatus(tutorProfileId: number, status: "pending" | "approved" | "rejected"): Promise<TutorProfile | undefined>;
   updateTutorCategoryStatus(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", status: "pending" | "approved" | "rejected" | "not_applied"): Promise<TutorProfile | undefined>;
   updateTutorCategorySubjects(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", subjects: string[]): Promise<TutorProfile | undefined>;
+  updateTutorProfile(tutorProfileId: number, data: Record<string, any>): Promise<TutorProfile | undefined>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -489,6 +490,14 @@ export class DatabaseStorage implements IStorage {
     
     const [updated] = await db.update(tutorProfiles)
       .set(updateData)
+      .where(eq(tutorProfiles.id, tutorProfileId))
+      .returning();
+    return updated;
+  }
+
+  async updateTutorProfile(tutorProfileId: number, data: Record<string, any>): Promise<TutorProfile | undefined> {
+    const [updated] = await db.update(tutorProfiles)
+      .set(data)
       .where(eq(tutorProfiles.id, tutorProfileId))
       .returning();
     return updated;

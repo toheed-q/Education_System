@@ -138,6 +138,16 @@ Preferred communication style: Simple, everyday language.
 - **API Endpoints**: POST /api/courses and POST /api/programs (admin/super_admin only)
 - **Search/Filter**: Both pages have working search functionality
 
+### Subject Selection System (February 2026)
+- **Category-Based Selection**: Tutors first pick a super category, then select subjects
+- **School Tutoring**: Predefined dropdown of Kenyan curriculum subjects (Mathematics, English, Kiswahili, Physics, etc.)
+- **Higher Education**: Predefined dropdown of university/college subjects (Computer Science, Law, Medicine, etc.)
+- **Professional Skills**: Free-text input since business/tech skills are limitless
+- **Per-Category Storage**: Subjects stored in `schoolTutoringSubjects`, `higherEducationSubjects`, `professionalSkillsSubjects` JSONB arrays
+- **Legacy Compatibility**: Combined subjects auto-populated in legacy `subjects` field
+- **Subject Constants**: Predefined lists in `shared/subjectCategories.ts`
+- **Profile Update API**: `PATCH /api/tutors/my-profile` updates bio, hourly rate, and per-category subjects
+
 ### Tutor Verification System
 - **Verification Types**: School Tutoring (KES 500 fee), Higher Ed/Professional Skills (KES 300 fee)
 - **Document Submission**: Tutors upload document URLs (Google Drive, Dropbox, etc.) for certificates, transcripts, or qualifications
