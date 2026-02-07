@@ -2,11 +2,11 @@ import { db } from "./db";
 import {
   users, programs, courses, courseWeeks, courseContent, quizzes, quizQuestions, quizAttempts,
   tutorProfiles, bookings, reviews, messages, enrollments, certificates, verificationRequests, withdrawals,
-  bookingPaymentIntents,
+  bookingPaymentIntents, notifications,
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
-  type InsertQuizAttempt, type BookingPaymentIntent, type VerificationRequest
+  type InsertQuizAttempt, type BookingPaymentIntent, type VerificationRequest, type Notification, type InsertNotification
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -80,6 +80,12 @@ export interface IStorage {
   updateTutorCategoryStatus(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", status: "pending" | "approved" | "rejected" | "not_applied"): Promise<TutorProfile | undefined>;
   updateTutorCategorySubjects(tutorProfileId: number, category: "school_tutoring" | "higher_education" | "professional_skills", subjects: string[]): Promise<TutorProfile | undefined>;
   updateTutorProfile(tutorProfileId: number, data: Record<string, any>): Promise<TutorProfile | undefined>;
+
+  // Notifications
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markAllNotificationsRead(userId: number): Promise<void>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -541,6 +547,31 @@ export class DatabaseStorage implements IStorage {
   async createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number }): Promise<QuizQuestion> {
     const [newQuestion] = await db.insert(quizQuestions).values(question).returning();
     return newQuestion;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+    return Number(result.count);
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db.insert(notifications).values(notification).returning();
+    return newNotification;
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db.update(notifications)
+      .set({ read: true })
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
   }
 }
 

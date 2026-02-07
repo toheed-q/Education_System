@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -19,6 +20,11 @@ import {
   SidebarFooter,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -53,7 +59,8 @@ import {
   CreditCard,
   User,
   Search,
-  Bell
+  Bell,
+  BellOff
 } from "lucide-react";
 import logo from "@assets/Lernentech_logo_1768655383502.png";
 
@@ -275,22 +282,110 @@ function getMessagesUrl(role: string): string {
   }
 }
 
+interface NotificationItem {
+  id: number;
+  userId: number;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+}
+
+function NotificationsPanel({ userId }: { userId: number }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const { data: unreadCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread-count"],
+    enabled: !!userId,
+    refetchInterval: 30000,
+  });
+
+  const { data: notificationsList } = useQuery<NotificationItem[]>({
+    queryKey: ["/api/notifications"],
+    enabled: !!userId && isOpen,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/notifications/mark-read"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const unreadCount = unreadCountData?.count ?? 0;
+
+  const handleOpenChange = useCallback((open: boolean) => {
+    setIsOpen(open);
+    if (open && unreadCount > 0) {
+      markReadMutation.mutate();
+    }
+  }, [unreadCount]);
+
+  function formatTimeAgo(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
+          <Bell className="h-5 w-5 text-muted-foreground" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-medium" data-testid="badge-notification-count">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0" data-testid="panel-notifications">
+        <div className="p-3 border-b">
+          <h3 className="font-semibold text-sm">Notifications</h3>
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {notificationsList && notificationsList.length > 0 ? (
+            <div>
+              {notificationsList.map((notif) => (
+                <div
+                  key={notif.id}
+                  className={`p-3 border-b last:border-b-0 ${!notif.read ? "bg-accent/30" : ""}`}
+                  data-testid={`notification-item-${notif.id}`}
+                >
+                  <p className="text-sm font-medium">{notif.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{formatTimeAgo(notif.createdAt)}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 text-center">
+              <BellOff className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">No notifications yet</p>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  
-  const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ["/api/messages/unread-count"],
-    enabled: !!user,
-    refetchInterval: 30000,
-  });
   
   if (!user) return null;
   
   const menuItems = getMenuItems(user.role);
   const roleLabel = getRoleLabel(user.role);
   const roleBadgeColor = getRoleBadgeColor(user.role);
-  const unreadCount = unreadData?.count ?? 0;
   
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -362,16 +457,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
             
             <div className="flex items-center gap-3">
-              <Link href={getMessagesUrl(user.role)}>
-                <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
-                  <Bell className="h-5 w-5 text-slate-600" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-medium">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </Button>
-              </Link>
+              <NotificationsPanel userId={user.id} />
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

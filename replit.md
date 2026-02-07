@@ -103,7 +103,7 @@ Preferred communication style: Simple, everyday language.
 ### Role-Specific Dashboards
 - **DashboardLayout** (`DashboardLayout.tsx`): Shared layout with role-based sidebar navigation
 - **StudentDashboard** (`StudentDashboard.tsx`): Enrolled courses, progress tracking, upcoming sessions, messages, certificates
-- **TutorDashboard** (`TutorDashboard.tsx`): Earnings overview with 25% platform fee breakdown, upcoming bookings, verification status, messages
+- **TutorDashboard** (`TutorDashboard.tsx`): Earnings overview (motivation-first design), upcoming bookings, verification status, messages
 - **AdminDashboard** (`AdminDashboard.tsx`): User/course/program management, verification requests, platform analytics
 - **Super Admin Controls**: Additional settings, audit logs, and platform configuration (verification fees: KES 500 School, KES 300 Higher Ed)
 - Login redirects: students → /dashboard, tutors → /tutor/dashboard, admins/super_admins → /admin/dashboard
@@ -159,6 +159,28 @@ Preferred communication style: Simple, everyday language.
   - `GET /api/verification-requests/my` - Tutor views their requests
   - `GET /api/admin/verification-requests` - Admin views pending requests
   - `PATCH /api/admin/verification-requests/:id` - Admin approves/rejects
+
+### Tutor Earnings Page (February 2026)
+- **Motivation-First Design**: Dashboard shows only Gross Earnings and Available for Withdrawal cards (no fee card)
+- **Info Tooltip**: Small info icon next to Gross Earnings explains platform management fee per Tutor Terms
+- **Fee at Withdrawal**: 25% platform fee breakdown shown only in the Request Withdrawal dialog
+- **Withdrawal Dialog**: Shows Gross Earnings, Platform Management Fee (25%), Net Payout with explanatory text
+- **Earnings History**: Shows session-level gross amounts without per-session fee breakdown
+- **Backend**: 25% fee logic unchanged in backend; fee applied at withdrawal, payout history records
+
+### Notifications System (February 2026)
+- **Database**: `notifications` table with userId, title, message, type, read (boolean), createdAt
+- **API Endpoints**:
+  - `GET /api/notifications` - User's notifications (last 50, newest first)
+  - `GET /api/notifications/unread-count` - Unread notification count for badge
+  - `POST /api/notifications/mark-read` - Mark all user's notifications as read
+- **Bell Icon Dropdown**: Popover panel opens on click, shows notification list with time-ago formatting
+- **Badge Behavior**: Badge shows unread count; clears immediately when panel opens (marks all as read)
+- **No Stale Badges**: Badge does NOT reappear on refresh/navigation; only new notifications increment it
+- **Auto-Generated Notifications**:
+  - Verification approved/rejected → notifies tutor
+  - New booking created via payment → notifies tutor
+  - New message sent → notifies receiver
 
 ### Test Accounts (password: password123)
 - `student@lernentech.com` - Student role

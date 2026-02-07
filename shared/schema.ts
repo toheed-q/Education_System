@@ -202,6 +202,16 @@ export const withdrawals = pgTable("withdrawals", {
   requestedAt: timestamp("requested_at").defaultNow(),
 });
 
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull().default("general"),
+  read: boolean("read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   tutorProfile: one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
@@ -272,6 +282,7 @@ export const insertVerificationRequestSchema = createInsertSchema(verificationRe
   submittedAt: true, 
   reviewedAt: true 
 });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, read: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -297,6 +308,8 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type VerificationRequest = typeof verificationRequests.$inferSelect;
 export type InsertVerificationRequest = z.infer<typeof insertVerificationRequestSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type SuperCategory = "school_tutoring" | "higher_education" | "professional_skills";
 export type VerificationStatus = "pending" | "approved" | "rejected" | "not_applied";
 

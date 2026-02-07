@@ -1,0 +1,271 @@
+. Core Product Principle (this must be explicit to the agent)
+
+Any action that requires login must:
+
+Remember what the user was trying to do
+
+Resume that action immediately after login
+
+Or clearly confirm the action is already completed
+
+Redirecting to a generic homepage or dashboard is always wrong unless the user explicitly chose it.
+
+This applies to:
+
+Booking sessions
+
+Course enrolment
+
+Payments
+
+Messaging tutors
+
+Saving progress
+
+Any gated action
+
+2. What’s Broken Right Now (so the agent understands the gap)
+Booking flow issues
+
+Logged-out user starts booking
+
+System does NOT ask for subject selection
+
+User clicks “Log In”
+
+System:
+
+Loses booking context
+
+Sends user to generic logged-in home page
+
+Does not resume booking
+
+Does not show pending booking
+
+Forces user to start over
+
+This violates basic marketplace UX expectations.
+
+3. Required Fixes – Booking Flow (Step by Step)
+A. Subject selection (must be mandatory)
+
+Instruction
+
+Add a required field: “What subject do you want tutoring on?”
+
+This must appear:
+
+Before date/time selection
+
+Before login is requested
+
+Source options:
+
+Tutor’s listed subjects
+
+Or platform-wide subject list filtered by tutor
+
+Validation
+
+User cannot proceed without selecting a subject
+
+Subject becomes part of the booking intent payload
+
+B. Booking intent must be saved BEFORE login
+
+When a logged-out user starts booking, do the following:
+
+On any interaction that advances the booking flow:
+
+Save a booking_intent object containing:
+
+tutor_id
+
+subject_id
+
+session_type (online / in-person)
+
+location (if in-person)
+
+selected_date
+
+selected_time
+
+session_rate
+
+timestamp
+
+Storage
+
+Use:
+
+Session storage (preferred)
+
+Or local storage with expiry
+
+This is NOT a booking yet, just intent
+
+C. Login should not reset context
+
+When user clicks “Log In” from booking flow:
+
+Append a redirect parameter, e.g.
+
+?redirect=continue_booking
+
+Do NOT send them to:
+
+Homepage
+
+Student dashboard
+
+Generic landing page
+
+D. Post-login behaviour (non-negotiable)
+
+After successful login:
+
+Check if a booking_intent exists
+
+If yes:
+
+Automatically redirect user back to:
+
+Booking confirmation / payment step
+
+Pre-populate all previously selected fields
+
+Show a clear heading:
+
+“Continue booking your session with Jane Tutor”
+
+User should feel like nothing was lost.
+
+E. Payment-first logic (clarify booking state)
+
+Because booking is only confirmed after payment:
+
+Status before payment: Pending booking
+
+Status after payment: Confirmed booking
+
+Rules
+
+Do NOT create a confirmed booking record before payment
+
+Do NOT show the session on dashboard until payment succeeds
+
+If payment succeeds:
+
+Redirect to:
+
+“Booking confirmed” screen
+
+Then show booking on:
+
+Student dashboard
+
+Bookings page
+
+4. Dashboard Behaviour After Action Completion
+Booking
+
+If user completes payment:
+
+Dashboard should show:
+
+Upcoming session
+
+Tutor name
+
+Subject
+
+Date and time
+
+Also show confirmation message:
+
+“Your session has been successfully booked.”
+
+If booking is pending (user logged out or abandoned):
+
+Do NOT show empty dashboard
+
+Either:
+
+Resume booking
+
+Or show a banner:
+
+“You have an incomplete booking. Continue?”
+
+5. Apply This Universally (Very Important)
+
+Tell the agent this is not a one-off fix.
+
+This pattern must apply to:
+Course enrolment
+
+If logged out user clicks “Enroll”
+
+After login:
+
+Resume enrolment
+
+Or take them to next step (payment or course access)
+
+Tutor messaging
+
+If logged out user clicks “Message tutor”
+
+After login:
+
+Open the message thread they initiated
+
+Payments
+
+If login interrupts payment:
+
+Resume payment
+
+Do NOT restart flow
+
+6. Universal Rule for All Gated Actions (copy-paste for agent)
+
+You can literally give them this block:
+
+For any action that requires login:
+
+Persist user intent before login
+
+Redirect back to the exact action after login
+
+Restore all previously entered data
+
+Never send users to a generic homepage or dashboard unless they explicitly choose it
+
+7. Optional but Strong Improvement (Recommended)
+
+Add a small system-wide helper:
+
+Intent Router
+
+A single utility that:
+
+Saves intent
+
+Restores intent
+
+Clears intent after completion
+
+Used by:
+
+Booking
+
+Enrolment
+
+Messaging
+
+Payments
+
+This prevents future regressions.

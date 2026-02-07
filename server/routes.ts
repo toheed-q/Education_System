@@ -627,6 +627,15 @@ Only respond with the description text, nothing else.`
         pricePaid: intent.amountKes,
         paystackReference: reference,
       });
+
+      // Notify tutor about new booking
+      const student = await storage.getUser(intent.studentId);
+      await storage.createNotification({
+        userId: intent.tutorId,
+        title: "New Booking",
+        message: `${student?.name || "A student"} has booked a session with you on ${new Date(intent.startTime).toLocaleDateString()}.`,
+        type: "booking",
+      });
       
       res.json({ 
         success: true, 
@@ -863,6 +872,20 @@ Only respond with the description text, nothing else.`
       if (status === "approved") {
         await storage.updateTutorVerificationStatus(updated.tutorProfileId, "approved");
       }
+
+      // Create notification for the tutor
+      const tutorProfile = await storage.getTutorProfile(updated.tutorProfileId);
+      if (tutorProfile) {
+        const categoryLabel = updated.verificationType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+        await storage.createNotification({
+          userId: tutorProfile.user.id,
+          title: status === "approved" ? "Verification Approved" : "Verification Rejected",
+          message: status === "approved"
+            ? `Your ${categoryLabel} verification has been approved. You can now accept bookings in this category.`
+            : `Your ${categoryLabel} verification was not approved.${reviewNotes ? ` Note: ${reviewNotes}` : ""}`,
+          type: "verification",
+        });
+      }
       
       res.json(updated);
     } catch (err) {
@@ -882,9 +905,17 @@ Only respond with the description text, nothing else.`
   app.post(api.messages.send.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const input = api.messages.send.input.parse(req.body);
+    const sender = req.user as any;
     const message = await storage.createMessage({
       ...input,
-      senderId: (req.user as any).id,
+      senderId: sender.id,
+    });
+
+    await storage.createNotification({
+      userId: input.receiverId,
+      title: "New Message",
+      message: `${sender.name} sent you a message.`,
+      type: "message",
     });
     res.status(201).json(message);
   });
@@ -902,6 +933,25 @@ Only respond with the description text, nothing else.`
     const conversations = await storage.getConversations((req.user as any).id);
     const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
     res.json({ count: totalUnread });
+  });
+
+  // Notifications
+  app.get("/api/notifications", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const notifs = await storage.getNotifications((req.user as any).id);
+    res.json(notifs);
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const count = await storage.getUnreadNotificationCount((req.user as any).id);
+    res.json({ count });
+  });
+
+  app.post("/api/notifications/mark-read", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    await storage.markAllNotificationsRead((req.user as any).id);
+    res.json({ success: true });
   });
 
   // Course Progression
