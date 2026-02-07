@@ -15,16 +15,16 @@ import { saveIntent, getIntent, clearIntent, type BookingIntent, type MessageInt
 
 declare global {
   interface Window {
-    PaystackPop: {
-      setup: (options: {
+    PaystackPop: new () => {
+      newTransaction: (options: {
         key: string;
         email: string;
         amount: number;
         currency: string;
         ref: string;
-        callback: (response: { reference: string }) => void;
-        onClose: () => void;
-      }) => { openIframe: () => void };
+        onSuccess: (response: { reference: string }) => void;
+        onCancel: () => void;
+      }) => void;
     };
   }
 }
@@ -172,18 +172,19 @@ export default function TutorProfile() {
         return;
       }
       
-      const handler = window.PaystackPop.setup({
+      const popup = new window.PaystackPop();
+      popup.newTransaction({
         key: paystackPublicKey,
         email: (user as any).email,
         amount: tutor.hourlyRate * 100, // Paystack uses kobo/cents
         currency: "KES",
         ref: paymentData.reference,
-        callback: async (response) => {
+        onSuccess: async (response) => {
           // Step 3: Verify payment with backend
           await verifyPayment.mutateAsync(response.reference);
           setIsProcessingPayment(false);
         },
-        onClose: () => {
+        onCancel: () => {
           setIsProcessingPayment(false);
           toast({
             title: "Payment Cancelled",
@@ -191,8 +192,6 @@ export default function TutorProfile() {
           });
         },
       });
-      
-      handler.openIframe();
     } catch (error: any) {
       setIsProcessingPayment(false);
       toast({
