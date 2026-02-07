@@ -2,9 +2,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useLocation } from "wouter";
 import { z } from "zod";
+import { getIntent, clearIntent, getIntentRedirectPath } from "@/lib/intent";
 
 type LoginRequest = z.infer<typeof api.auth.login.input>;
 type RegisterRequest = z.infer<typeof api.auth.register.input>;
+
+function getRedirectForUser(role: string): string {
+  const intent = getIntent();
+  if (intent) {
+    const path = getIntentRedirectPath(intent);
+    clearIntent();
+    return path;
+  }
+  if (role === 'tutor') return '/tutor/dashboard';
+  if (role === 'admin' || role === 'super_admin') return '/admin/dashboard';
+  return '/dashboard';
+}
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -37,9 +50,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData([api.auth.me.path], data);
-      if (data.role === 'tutor') setLocation('/tutor/dashboard');
-      else if (data.role === 'admin' || data.role === 'super_admin') setLocation('/admin/dashboard');
-      else setLocation('/dashboard');
+      setLocation(getRedirectForUser(data.role));
     },
   });
 
@@ -60,7 +71,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData([api.auth.me.path], data);
-      setLocation('/dashboard');
+      setLocation(getRedirectForUser(data.role));
     },
   });
 

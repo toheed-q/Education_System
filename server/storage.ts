@@ -58,6 +58,8 @@ export interface IStorage {
   // Messages
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
+  markMessagesRead(receiverId: number, senderId: number): Promise<void>;
+  getConversations(userId: number): Promise<any[]>;
 
   // Enrollments
   isUserEnrolledInCourse(userId: number, courseId: number): Promise<boolean>;
@@ -315,6 +317,13 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: InsertMessage): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
+  }
+
+  async markMessagesRead(receiverId: number, senderId: number): Promise<void> {
+    await db.execute(sql`
+      UPDATE messages SET read = true 
+      WHERE sender_id = ${senderId} AND receiver_id = ${receiverId} AND read = false
+    `);
   }
 
   async getConversations(userId: number): Promise<any[]> {

@@ -1,16 +1,17 @@
 import { Navigation } from "@/components/Navigation";
 import { useTutor } from "@/hooks/use-tutors";
-import { useRoute, Link } from "wouter";
+import { useRoute, Link, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Star, Clock, BookOpen, MessageCircle, Calendar, Award, CheckCircle, Loader2, Send, CreditCard, Video, MapPin } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { saveIntent, getIntent, clearIntent, type BookingIntent, type MessageIntent } from "@/lib/intent";
 
 declare global {
   interface Window {
@@ -34,14 +35,39 @@ export default function TutorProfile() {
   const { data: tutor, isLoading } = useTutor(tutorId);
   const { user } = useAuth();
   const { toast } = useToast();
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  const continueBooking = searchParams.get("continue_booking") === "true";
+  const continueMessage = searchParams.get("continue_message") === "true";
   const [bookingOpen, setBookingOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [sessionType, setSessionType] = useState<"online" | "physical">("online");
   const [location, setLocation] = useState<string>("");
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  useEffect(() => {
+    if (!user || !tutor) return;
+    const intent = getIntent();
+    if (continueBooking && intent?.type === "booking") {
+      const bi = intent as BookingIntent;
+      setSessionType(bi.sessionType);
+      if (bi.location) setLocation(bi.location);
+      setSelectedDate(bi.selectedDate);
+      setSelectedTime(bi.selectedTime);
+      if (bi.selectedSubject) setSelectedSubject(bi.selectedSubject);
+      setBookingOpen(true);
+      clearIntent();
+    } else if (continueMessage && intent?.type === "message") {
+      const mi = intent as MessageIntent;
+      if (mi.content) setMessageContent(mi.content);
+      setMessageOpen(true);
+      clearIntent();
+    }
+  }, [user, tutor, continueBooking, continueMessage]);
 
   const sendMessage = useMutation({
     mutationFn: async (data: { receiverId: number; content: string }) => {
@@ -87,6 +113,8 @@ export default function TutorProfile() {
       setBookingOpen(false);
       setSelectedDate("");
       setSelectedTime("");
+      setSelectedSubject("");
+      setLocation("");
     },
     onError: () => {
       toast({
@@ -289,7 +317,7 @@ export default function TutorProfile() {
                     Book a Session
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Book a Session with {tutor.user.name}</DialogTitle>
                     <DialogDescription>
@@ -298,6 +326,21 @@ export default function TutorProfile() {
                   </DialogHeader>
                   
                   <div className="py-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">What subject do you need help with?</label>
+                      <select
+                        value={selectedSubject}
+                        onChange={(e) => setSelectedSubject(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                        data-testid="select-booking-subject"
+                      >
+                        <option value="">Select a subject</option>
+                        {(tutor.subjects as string[]).map((subject: string, i: number) => (
+                          <option key={i} value={subject}>{subject}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Session Type</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -394,7 +437,7 @@ export default function TutorProfile() {
                     {user ? (
                       <Button 
                         className="w-full"
-                        disabled={!selectedDate || !selectedTime || isProcessingPayment || initiatePayment.isPending}
+                        disabled={!selectedSubject || !selectedDate || !selectedTime || isProcessingPayment || initiatePayment.isPending}
                         onClick={handleBookSession}
                         data-testid="button-confirm-booking"
                       >
@@ -413,9 +456,21 @@ export default function TutorProfile() {
                     ) : (
                       <div className="w-full text-center">
                         <p className="text-sm text-slate-500 mb-2">Please log in to book a session</p>
-                        <Link href="/login">
-                          <Button className="w-full">Log In</Button>
-                        </Link>
+                        <Button className="w-full" onClick={() => {
+                          saveIntent({
+                            type: "booking",
+                            tutorId: tutor.user.id,
+                            tutorName: tutor.user.name,
+                            sessionType,
+                            location: sessionType === "physical" ? location : undefined,
+                            selectedDate,
+                            selectedTime,
+                            selectedSubject,
+                            sessionRate: tutor.hourlyRate,
+                            timestamp: Date.now(),
+                          });
+                          window.location.href = "/login";
+                        }} data-testid="button-login-to-book">Log In</Button>
                       </div>
                     )}
                   </DialogFooter>
@@ -455,9 +510,15 @@ export default function TutorProfile() {
                       <div className="text-center py-4">
                         <MessageCircle className="w-12 h-12 mx-auto text-slate-300 mb-3" />
                         <p className="text-slate-500 mb-4">Please log in to send a message</p>
-                        <Link href="/login">
-                          <Button>Log In</Button>
-                        </Link>
+                        <Button onClick={() => {
+                          saveIntent({
+                            type: "message",
+                            tutorId: tutor.user.id,
+                            tutorName: tutor.user.name,
+                            timestamp: Date.now(),
+                          });
+                          window.location.href = "/login";
+                        }} data-testid="button-login-to-message">Log In</Button>
                       </div>
                     )}
                   </div>

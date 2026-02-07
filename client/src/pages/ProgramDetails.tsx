@@ -4,10 +4,12 @@ import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Clock, Award, Users, ArrowRight, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { saveIntent, getIntent, clearIntent } from "@/lib/intent";
 
 export default function ProgramDetails() {
   const [, params] = useRoute("/programs/:slug");
@@ -17,6 +19,7 @@ export default function ProgramDetails() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const autoEnrollTriggered = useRef(false);
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
@@ -37,11 +40,20 @@ export default function ProgramDetails() {
 
   const handleEnroll = () => {
     if (!user) {
+      saveIntent({ type: "enrollment", programSlug: slug, timestamp: Date.now() });
       navigate("/login");
       return;
     }
     enrollMutation.mutate();
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auto_enroll") === "true" && user && program?.id && !autoEnrollTriggered.current) {
+      autoEnrollTriggered.current = true;
+      enrollMutation.mutate();
+    }
+  }, [user, program?.id]);
 
   if (isLoading) {
     return (

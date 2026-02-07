@@ -56,6 +56,23 @@ export default function StudentMessages() {
     enabled: !!selectedConversation,
   });
 
+  const markReadMutation = useMutation({
+    mutationFn: async (senderId: number) => {
+      return apiRequest("POST", "/api/messages/mark-read", { senderId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
+    },
+  });
+
+  const handleSelectConversation = (conv: Conversation) => {
+    setSelectedConversation(conv);
+    if (conv.unreadCount > 0) {
+      markReadMutation.mutate(conv.user.id);
+    }
+  };
+
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       return apiRequest("POST", "/api/messages", {
@@ -110,7 +127,7 @@ export default function StudentMessages() {
                   {conversations.map((conv) => (
                     <button
                       key={conv.user.id}
-                      onClick={() => setSelectedConversation(conv)}
+                      onClick={() => handleSelectConversation(conv)}
                       className={cn(
                         "w-full p-4 text-left hover:bg-slate-50 transition-colors",
                         selectedConversation?.user.id === conv.user.id && "bg-blue-50"

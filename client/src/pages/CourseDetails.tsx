@@ -4,12 +4,13 @@ import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Clock, BookOpen, CheckCircle, Lock, PlayCircle, FileText, Video, LinkIcon, ChevronDown, ChevronUp, Award } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { saveIntent, getIntent, clearIntent } from "@/lib/intent";
 
 interface ContentItem {
   id: number;
@@ -231,6 +232,7 @@ export default function CourseDetails() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const autoEnrollTriggered = useRef(false);
   
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
@@ -255,11 +257,20 @@ export default function CourseDetails() {
 
   const handleEnroll = () => {
     if (!user) {
+      saveIntent({ type: "enrollment", courseSlug: slug, timestamp: Date.now() });
       navigate("/login");
       return;
     }
     enrollMutation.mutate();
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auto_enroll") === "true" && user && courseId && !autoEnrollTriggered.current) {
+      autoEnrollTriggered.current = true;
+      enrollMutation.mutate();
+    }
+  }, [user, courseId]);
 
   const weekUnlockStatus = useMemo(() => {
     const status: Record<number, { unlocked: boolean; completed: boolean }> = {};

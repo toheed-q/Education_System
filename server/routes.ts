@@ -927,6 +927,14 @@ Only respond with the description text, nothing else.`
     res.json(conversations);
   });
 
+  app.post("/api/messages/mark-read", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const { senderId } = req.body;
+    if (!senderId) return res.status(400).json({ message: "senderId is required" });
+    await storage.markMessagesRead((req.user as any).id, senderId);
+    res.json({ success: true });
+  });
+
   // Get total unread message count for dashboard
   app.get("/api/messages/unread-count", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);

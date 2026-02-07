@@ -188,5 +188,26 @@ Preferred communication style: Simple, everyday language.
 - `admin@lernentech.com` - Admin role
 - `esthernjane@gmail.com` - Super admin
 
+### Intent Preservation System (February 2026)
+- **Universal Pattern**: Any action requiring login saves intent to sessionStorage before redirect
+- **Intent Types**: Booking (tutorId, subject, session type, date/time), Enrollment (course/program slug), Message (tutorId, content)
+- **Login Redirect**: After login, checks for pending intent and redirects to exact action page
+- **Auto-Enrollment**: Course/program pages auto-trigger enrollment when returning from login with `?auto_enroll=true`
+- **Booking Restoration**: Tutor profile restores all booking form fields when returning with `?continue_booking=true`
+- **Message Restoration**: Tutor profile opens message dialog when returning with `?continue_message=true`
+- **Intent Expiry**: 30 minutes after creation
+- **Utility**: `client/src/lib/intent.ts` - `saveIntent()`, `getIntent()`, `clearIntent()`, `getIntentRedirectPath()`
+
+### Subject Selection in Booking (February 2026)
+- **Required Field**: Subject dropdown appears before session type/date/time in booking dialog
+- **Source**: Tutor's listed subjects populate the dropdown
+- **Validation**: Pay & Book button disabled until subject is selected
+- **Booking Modal**: Made scrollable with `max-h-[85vh] overflow-y-auto` for smaller screens
+
+### Messages Read Status Fix (February 2026)
+- **API**: `POST /api/messages/mark-read` with `{ senderId }` marks all messages from that sender as read
+- **Frontend**: Opening a conversation calls mark-read, invalidates unread count cache
+- **Dashboard**: Messages card count now reflects actual unread state
+
 ### Currency
 All monetary values are in KES (Kenyan Shillings) stored as integers.
