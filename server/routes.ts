@@ -13,6 +13,9 @@ import { eq } from "drizzle-orm";
 import { generateSlug } from "@shared/utils";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import OpenAI from "openai";
+import { verifyFirebaseToken } from "./firebaseAdmin";
+import crypto from "crypto";
+import { sendOtpEmail } from "./mail";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -80,15 +83,37 @@ export async function registerRoutes(
       if (existing) {
         return res.status(400).json({ message: "Email already exists" });
       }
-      
+
+      console.log(`[AUTH] Registering user: ${input.email}`);
       const hashedPassword = await argon2.hash(input.password);
-      const user = await storage.createUser({ ...input, password: hashedPassword });
+      const user = await storage.createUser({ ...input, password: hashedPassword, isVerified: false });
+      console.log(`[AUTH] Local user created with ID: ${user.id}, isVerified: ${user.isVerified}`);
       
-      req.login(user, (err) => {
-        if (err) return next(err);
-        res.status(201).json(user);
-      });
+      // Generate OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      console.log(`[AUTH] Generated OTP ${otp} for email ${user.email}`);
+      await storage.setVerificationOtp(user.id, otp, expiresAt);
+      
+      console.log(`[AUTH] Calling sendOtpEmail...`);
+      const mailSent = await sendOtpEmail(user.email, otp);
+      
+      if (!mailSent) {
+        console.error(`[AUTH] Could not send verification email to ${user.email}`);
+      } else {
+        console.log(`[AUTH] Email task completed for ${user.email}`);
+      }
+      
+      const responseBody = { 
+        message: "Registration semi-complete. Please verify your email.",
+        email: user.email,
+        requiresVerification: true 
+      };
+      console.log(`[AUTH] Returning success response to frontend for ${user.email}:`, responseBody);
+      res.status(202).json(responseBody);
     } catch (err) {
+      console.error(`[AUTH] Registration error:`, err);
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
@@ -97,8 +122,73 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.auth.login.path, passport.authenticate("local"), (req, res) => {
-    res.json(req.user);
+  app.post("/api/auth/verify-otp", async (req, res, next) => {
+    try {
+      const { email, otp } = req.body;
+      if (!email || !otp) {
+        return res.status(400).json({ message: "Email and OTP are required" });
+      }
+
+      console.log(`[AUTH] Verification request for ${email} with OTP: ${otp}`);
+      const user = await storage.verifyUserOtp(email, otp);
+      if (!user) {
+        console.warn(`[AUTH] Verification failed for ${email}`);
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+
+      console.log(`[AUTH] Verification successful for ${email}. Logging in user ${user.id}...`);
+      req.login(user, (err) => {
+        if (err) {
+          console.error(`[AUTH] Login failed for ${email}:`, err);
+          return next(err);
+        }
+        console.log(`[AUTH] Login successful for ${email}`);
+        res.json(user);
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post("/api/auth/resend-otp", async (req, res, next) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.isVerified) return res.status(400).json({ message: "User already verified" });
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await storage.setVerificationOtp(user.id, otp, expiresAt);
+      await sendOtpEmail(user.email, otp);
+
+      res.json({ message: "OTP resent successfully" });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post(api.auth.login.path, (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) return res.status(401).json({ message: info?.message || "Login failed" });
+      
+      if (!user.isVerified) {
+        return res.status(403).json({ 
+          message: "Email not verified", 
+          requiresVerification: true,
+          email: user.email 
+        });
+      }
+
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        res.json(user);
+      });
+    })(req, res, next);
   });
 
   app.post(api.auth.logout.path, (req, res, next) => {
@@ -111,6 +201,47 @@ export async function registerRoutes(
   app.get(api.auth.me.path, (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
+  });
+
+  // Firebase Auth sync
+  app.post("/api/auth/sync", verifyFirebaseToken, async (req, res) => {
+    const firebaseUser = (req as any).firebaseUser;
+    if (!firebaseUser) {
+      return res.status(401).json({ message: "Unauthorized: No Firebase user" });
+    }
+
+    const { email, name, picture } = firebaseUser;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required from Firebase" });
+    }
+
+    let user = await storage.getUserByEmail(email);
+    if (!user) {
+      // Create new user in Postgres
+      const role = req.body.role || "student"; 
+      user = await storage.createUser({
+        email,
+        name: name || email.split("@")[0],
+        role,
+        password: "FIREBASE_AUTH", 
+        isVerified: true, 
+      });
+
+      // If they are a tutor, create a tutor profile as well
+      if (role === "tutor") {
+        await storage.createTutorProfile({
+          userId: user.id,
+          bio: "New tutor profile",
+          hourlyRate: 1000,
+          subjects: [],
+          schoolTutoringSubjects: [],
+          higherEducationSubjects: [],
+          professionalSkillsSubjects: [],
+        });
+      }
+    }
+
+    res.json(user);
   });
 
   // Programs & Courses
@@ -491,6 +622,13 @@ Only respond with the description text, nothing else.`
         return res.status(400).json({ message: "Payment verification failed" });
       }
       
+      // CRITICAL: Validate amount matches the intent to prevent amount tampering
+      const expectedAmountPesewas = intent.amountKes * 100;
+      if (verifyData.data.amount !== expectedAmountPesewas) {
+        console.error(`[SECURITY] Enrollment amount mismatch for ref ${reference}: expected ${expectedAmountPesewas}, got ${verifyData.data.amount}`);
+        return res.status(400).json({ message: "Payment amount mismatch" });
+      }
+      
       // Mark intent as paid
       await storage.markEnrollmentPaymentIntentPaid(reference);
       
@@ -516,6 +654,99 @@ Only respond with the description text, nothing else.`
       console.error("Enrollment payment verification error:", err);
       res.status(500).json({ message: "Failed to verify payment" });
     }
+  });
+
+  // Paystack Webhook for asynchronous payment notifications
+  app.post("/api/webhooks/paystack", async (req, res) => {
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(500).json({ message: "Payment not configured" });
+    }
+
+    // Verify signature using the raw request body buffer (NOT JSON.stringify)
+    // The rawBody is captured by the verify callback in express.json() middleware
+    const rawBody = (req as any).rawBody;
+    if (!rawBody) {
+      console.error("[WEBHOOK] No raw body available for signature verification");
+      return res.status(400).json({ message: "Unable to verify signature" });
+    }
+
+    const hash = crypto
+      .createHmac("sha512", PAYSTACK_SECRET_KEY)
+      .update(rawBody)
+      .digest("hex");
+
+    if (hash !== req.headers["x-paystack-signature"]) {
+      console.error("[WEBHOOK] Invalid Paystack signature");
+      return res.status(401).json({ message: "Invalid signature" });
+    }
+
+    const event = req.body;
+    if (event.event === "charge.success") {
+      const { reference } = event.data;
+      
+      try {
+        if (reference.startsWith("ENRL-")) {
+          // Handle Enrollment
+          const intent = await storage.getEnrollmentPaymentIntent(reference);
+          if (intent && intent.status !== "paid") {
+            // CRITICAL: Validate amount before fulfilling
+            const expectedAmount = intent.amountKes * 100;
+            if (event.data.amount !== expectedAmount) {
+              console.error(`[WEBHOOK][SECURITY] Enrollment amount mismatch for ref ${reference}: expected ${expectedAmount}, got ${event.data.amount}`);
+              return res.sendStatus(200); // Acknowledge but do not fulfill
+            }
+            
+            await storage.markEnrollmentPaymentIntentPaid(reference);
+            
+            // Avoid duplicate enrollment
+            const existing = await storage.getEnrollmentForUser(intent.userId, intent.courseId ?? undefined, intent.programId ?? undefined);
+            if (!existing) {
+              await storage.createEnrollment({
+                userId: intent.userId,
+                courseId: intent.courseId ?? undefined,
+                programId: intent.programId ?? undefined,
+              });
+              console.log(`[WEBHOOK] Enrollment created for user ${intent.userId}, ref ${reference}`);
+            }
+          }
+        } else if (reference.startsWith("LRNT-")) {
+          // Handle Booking
+          const intent = await storage.getPaymentIntent(reference);
+          if (intent && intent.status !== "paid") {
+            // CRITICAL: Validate amount before fulfilling
+            const expectedAmount = intent.amountKes * 100;
+            if (event.data.amount !== expectedAmount) {
+              console.error(`[WEBHOOK][SECURITY] Booking amount mismatch for ref ${reference}: expected ${expectedAmount}, got ${event.data.amount}`);
+              return res.sendStatus(200); // Acknowledge but do not fulfill
+            }
+            
+            await storage.markPaymentIntentPaid(reference);
+            
+            await storage.createBookingFromPayment({
+              studentId: intent.studentId,
+              tutorId: intent.tutorId,
+              startTime: intent.startTime,
+              endTime: intent.endTime,
+              sessionType: intent.sessionType || "online",
+              location: intent.location,
+              pricePaid: intent.amountKes,
+              paystackReference: reference,
+              subject: intent.subject,
+              gradeLevel: intent.gradeLevel,
+              topic: intent.topic,
+              sessionNotes: intent.sessionNotes,
+            });
+            console.log(`[WEBHOOK] Booking created for student ${intent.studentId}, ref ${reference}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error processing Paystack webhook fulfillment:", err);
+        // We still return 200 to Paystack to stop retries, as we logged the error
+      }
+    }
+
+    res.sendStatus(200);
   });
 
   // Tutors
@@ -753,9 +984,9 @@ Only respond with the description text, nothing else.`
   });
 
   // Verify Payment and Create Booking (step 2 of booking flow)
+  // Does not require authentication - user is redirected back from Paystack
+  // Security: verification is tied to Paystack reference which was created by authenticated user
   app.post("/api/bookings/verify-payment", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    
     const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
     if (!PAYSTACK_SECRET_KEY) {
       return res.status(500).json({ message: "Payment not configured" });
@@ -763,6 +994,9 @@ Only respond with the description text, nothing else.`
     
     try {
       const { reference } = req.body;
+      if (!reference) {
+        return res.status(400).json({ message: "Payment reference required" });
+      }
       
       // Verify with Paystack
       const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
@@ -784,7 +1018,14 @@ Only respond with the description text, nothing else.`
       }
       
       if (intent.status === "paid") {
-        return res.status(400).json({ message: "Payment already processed" });
+        return res.json({ success: true, message: "Payment already processed" });
+      }
+      
+      // CRITICAL: Validate amount matches the intent to prevent amount tampering
+      const expectedAmountPesewas = intent.amountKes * 100;
+      if (verifyData.data.amount !== expectedAmountPesewas) {
+        console.error(`[SECURITY] Booking amount mismatch for ref ${reference}: expected ${expectedAmountPesewas}, got ${verifyData.data.amount}`);
+        return res.status(400).json({ message: "Payment amount mismatch" });
       }
       
       // Mark intent as paid
@@ -826,20 +1067,11 @@ Only respond with the description text, nothing else.`
     }
   });
 
-  // Legacy direct booking (keep for now but should require payment)
-  app.post(api.bookings.create.path, async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    try {
-      const input = api.bookings.create.input.parse(req.body);
-      const booking = await storage.createBooking({ 
-        ...input, 
-        studentId: (req.user as any).id,
-      });
-      res.status(201).json(booking);
-    } catch (err) {
-      console.error("Booking error:", err);
-      res.status(400).json({ message: "Invalid booking" });
-    }
+  // Legacy direct booking - DISABLED: All bookings must go through payment flow
+  app.post(api.bookings.create.path, async (_req, res) => {
+    return res.status(403).json({ 
+      message: "Direct booking is disabled. Please use the payment flow to book a session." 
+    });
   });
 
   app.get(api.bookings.list.path, async (req, res) => {

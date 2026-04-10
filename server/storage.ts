@@ -23,6 +23,8 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserVerification(id: number, isVerified: boolean): Promise<User>;
+  setVerificationOtp(userId: number, otp: string, expiresAt: Date): Promise<void>;
+  verifyUserOtp(email: string, otp: string): Promise<User | undefined>;
 
   // Programs & Courses
   getPrograms(): Promise<Program[]>;
@@ -80,6 +82,10 @@ export interface IStorage {
   getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
   createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt>;
   getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]>;
+
+  // OTP Verification
+  setVerificationOtp(userId: number, otp: string, expiresAt: Date): Promise<void>;
+  verifyUserOtp(email: string, otp: string): Promise<User | undefined>;
 
   // Verification Requests
   createVerificationRequest(request: { tutorProfileId: number; verificationType: "school_tutoring" | "higher_education" | "professional_skills"; documentUrl: string; nationalIdUrl?: string; additionalNotes?: string; feeAmountKes: number }): Promise<VerificationRequest>;
@@ -667,6 +673,59 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications)
       .set({ read: true })
       .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+  }
+
+  async setVerificationOtp(userId: number, otp: string, expiresAt: Date): Promise<void> {
+    await db.update(users)
+      .set({ verificationOtp: otp, otpExpiresAt: expiresAt })
+      .where(eq(users.id, userId));
+  }
+
+  async verifyUserOtp(email: string, otp: string): Promise<User | undefined> {
+    const trimmedEmail = email.toLowerCase().trim();
+    console.log(`[AUTH] Verifying OTP for: ${trimmedEmail} (OTP received: "${otp}")`);
+    
+    const [user] = await db.select().from(users).where(eq(users.email, trimmedEmail)).limit(1);
+    
+    if (!user) {
+      console.warn(`[AUTH] Verification failed: User ${trimmedEmail} not found`);
+      return undefined;
+    }
+
+    console.log(`[AUTH] User found. Stored OTP: "${user.verificationOtp}", Expires: ${user.otpExpiresAt}`);
+    
+    if (user.verificationOtp !== otp) {
+      console.warn(`[AUTH] Verification failed: OTP mismatch for ${trimmedEmail}`);
+      return undefined;
+    }
+    
+    if (!user.otpExpiresAt) {
+      console.warn(`[AUTH] Verification failed: No expiration time set for ${trimmedEmail}`);
+      return undefined;
+    }
+
+    // Add 1-minute buffer (grace period) for clock skews
+    const now = new Date();
+    const isExpired = now > new Date(user.otpExpiresAt.getTime() + 60 * 1000);
+    
+    if (isExpired) {
+      console.warn(`[AUTH] Verification failed: OTP expired for ${trimmedEmail} (Now: ${now}, Expired: ${user.otpExpiresAt})`);
+      return undefined;
+    }
+    
+    console.log(`[AUTH] OTP verified successfully for ${trimmedEmail}. Updating user status...`);
+    
+    // Clear OTP and verify user
+    const [updatedUser] = await db.update(users)
+      .set({ 
+        isVerified: true, 
+        verificationOtp: null, 
+        otpExpiresAt: null 
+      })
+      .where(eq(users.id, user.id))
+      .returning();
+      
+    return updatedUser;
   }
 }
 

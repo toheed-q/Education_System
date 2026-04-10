@@ -74,6 +74,17 @@ export const api = {
         401: errorSchemas.unauthorized,
       },
     },
+    sync: {
+      method: 'POST' as const,
+      path: '/api/auth/sync',
+      input: z.object({
+        role: z.enum(["student", "tutor"]).optional(),
+      }),
+      responses: {
+        200: z.custom<typeof users.$inferSelect>(),
+        401: errorSchemas.unauthorized,
+      },
+    },
   },
   programs: {
     list: {

@@ -10,24 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { saveIntent, getIntent, clearIntent, type BookingIntent, type MessageIntent } from "@/lib/intent";
-
-declare global {
-  interface Window {
-    PaystackPop: new () => {
-      newTransaction: (options: {
-        key: string;
-        email: string;
-        amount: number;
-        currency: string;
-        ref: string;
-        onSuccess: (response: { reference: string }) => void;
-        onCancel: () => void;
-      }) => void;
-    };
-  }
-}
 
 export default function TutorProfile() {
   const [, params] = useRoute("/tutors/:id");
@@ -50,7 +34,6 @@ export default function TutorProfile() {
   const [topic, setTopic] = useState<string>("");
   const [sessionNotes, setSessionNotes] = useState<string>("");
   const [messageContent, setMessageContent] = useState("");
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const { data: bookedSlotsData } = useQuery<{ bookedSlots: string[] }>({
     queryKey: ['/api/bookings/booked-slots', tutor?.user?.id],
@@ -133,33 +116,6 @@ export default function TutorProfile() {
     },
   });
 
-  const verifyPayment = useMutation({
-    mutationFn: async (reference: string) => {
-      const response = await apiRequest("POST", "/api/bookings/verify-payment", { reference });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings/booked-slots"] });
-      toast({
-        title: "Booking Confirmed!",
-        description: "Your payment was successful. The tutor will see your booking request.",
-      });
-      setBookingOpen(false);
-      setSelectedDate("");
-      setSelectedTime("");
-      setSelectedSubject("");
-      setLocation("");
-    },
-    onError: () => {
-      toast({
-        title: "Payment Verification Failed",
-        description: "Please contact support if you were charged.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleSendMessage = () => {
     if (!tutor || !messageContent.trim()) return;
     sendMessage.mutate({
@@ -182,10 +138,8 @@ export default function TutorProfile() {
     const startTime = new Date(`${selectedDate}T${selectedTime}:00`);
     const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour session
     
-    setIsProcessingPayment(true);
-    
     try {
-      // Step 1: Initialize payment with backend
+      // Step 1: Initialize payment with backend (server controls the amount)
       const paymentData = await initiatePayment.mutateAsync({
         tutorId: tutor.id,
         startTime: startTime.toISOString(),
@@ -198,43 +152,12 @@ export default function TutorProfile() {
         sessionNotes: sessionNotes.trim() || undefined,
       });
       
-      // Step 2: Open Paystack popup
-      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      // Step 2: Save return context for PaymentCallback page
+      sessionStorage.setItem("booking_return_tutor_id", String(tutor.id));
       
-      if (!paystackPublicKey) {
-        toast({
-          title: "Payment Not Available",
-          description: "Payment integration is being set up. Please try again later.",
-          variant: "destructive",
-        });
-        setIsProcessingPayment(false);
-        return;
-      }
-      
-      setBookingOpen(false);
-
-      const popup = new window.PaystackPop();
-      popup.newTransaction({
-        key: paystackPublicKey,
-        email: (user as any).email,
-        amount: tutor.hourlyRate * 100, // Paystack uses kobo/cents
-        currency: "KES",
-        ref: paymentData.reference,
-        onSuccess: async (response) => {
-          await verifyPayment.mutateAsync(response.reference);
-          setIsProcessingPayment(false);
-        },
-        onCancel: () => {
-          setIsProcessingPayment(false);
-          setBookingOpen(true);
-          toast({
-            title: "Payment Cancelled",
-            description: "You cancelled the payment process.",
-          });
-        },
-      });
+      // Step 3: Redirect to Paystack hosted checkout (secure, no client keys needed)
+      window.location.href = paymentData.authorizationUrl;
     } catch (error: any) {
-      setIsProcessingPayment(false);
       toast({
         title: "Payment Failed",
         description: error.message || "Could not initiate payment. Please try again.",
@@ -520,11 +443,11 @@ export default function TutorProfile() {
                     {user ? (
                       <Button 
                         className="w-full"
-                        disabled={!selectedSubject || !selectedDate || !selectedTime || isProcessingPayment || initiatePayment.isPending}
+                        disabled={!selectedSubject || !selectedDate || !selectedTime || initiatePayment.isPending}
                         onClick={handleBookSession}
                         data-testid="button-confirm-booking"
                       >
-                        {isProcessingPayment || initiatePayment.isPending ? (
+                        {initiatePayment.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Processing...

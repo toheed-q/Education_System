@@ -19,7 +19,15 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").default("student").notNull(),
   name: text("name").notNull(),
   isVerified: boolean("is_verified").default(false),
+  verificationOtp: text("verification_otp"),
+  otpExpiresAt: timestamp("otp_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const session = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 
 export const programs = pgTable("programs", {
@@ -265,7 +273,7 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
 }));
 
 // Insert Schemas
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, isVerified: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProgramSchema = createInsertSchema(programs).omit({ id: true, createdAt: true, slug: true });
 export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true, slug: true });
 export const insertWeekSchema = createInsertSchema(courseWeeks).omit({ id: true });

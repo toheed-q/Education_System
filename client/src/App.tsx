@@ -33,6 +33,7 @@ import AdminAnalytics from "@/pages/admin/AdminAnalytics";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLogs from "@/pages/admin/AdminLogs";
 import EnrollmentCallback from "@/pages/EnrollmentCallback";
+import PaymentCallback from "@/pages/PaymentCallback";
 
 function Router() {
   return (
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/enrollment/callback" component={EnrollmentCallback} />
+      <Route path="/payment/callback" component={PaymentCallback} />
       
       {/* Student dashboard routes */}
       <Route path="/dashboard" component={StudentDashboard} />
