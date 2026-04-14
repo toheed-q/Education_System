@@ -4,3 +4,21 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local files and debris
+Credentials.txt
+scratch/
+tmp/
+*.log
+.replit
+replit.md
+attached_assets/
+firebase-backup/
+server_error.txt
+debug_log.txt
+create_admin.ts
