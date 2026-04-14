@@ -6,7 +6,8 @@ import {
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
-  type InsertQuizAttempt, type BookingPaymentIntent, type EnrollmentPaymentIntent, type VerificationRequest, type Notification, type InsertNotification
+  type InsertQuizAttempt, type BookingPaymentIntent, type EnrollmentPaymentIntent, type VerificationRequest, 
+  type Notification, type InsertNotification, type InsertCourseWeek, type InsertCourseContent
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -36,7 +37,9 @@ export interface IStorage {
   getCourse(id: number): Promise<Course | undefined>;
   getCourseBySlug(slug: string): Promise<Course | undefined>;
   getCourseWeeks(courseId: number): Promise<CourseWeek[]>;
+  getWeek(id: number): Promise<CourseWeek | undefined>;
   getWeekContent(weekId: number): Promise<CourseContent[]>;
+  getContent(id: number): Promise<CourseContent | undefined>;
   getWeekQuiz(weekId: number): Promise<Quiz | undefined>;
 
   // Tutors
@@ -79,9 +82,14 @@ export interface IStorage {
 
   // Quizzes
   getQuiz(id: number): Promise<Quiz | undefined>;
+  getQuizByUnitId(unitId: number): Promise<Quiz | undefined>;
   getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
   createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt>;
   getPassedQuizAttempts(userId: number): Promise<QuizAttempt[]>;
+  updateQuiz(id: number, data: Partial<{ title: string; passScorePercent: number; maxRetakes: number; isFinalExam: boolean }>): Promise<Quiz | undefined>;
+  deleteQuiz(id: number): Promise<boolean>;
+  updateQuizQuestion(id: number, data: Partial<{ questionText: string; options: string[]; correctOptionIndex: number; explanation: string }>): Promise<QuizQuestion | undefined>;
+  deleteQuizQuestion(id: number): Promise<boolean>;
 
   // OTP Verification
   setVerificationOtp(userId: number, otp: string, expiresAt: Date): Promise<void>;
@@ -109,10 +117,21 @@ export interface IStorage {
   countPrograms(): Promise<number>;
   createProgram(program: { title: string; description: string; slug: string; price: number; published: boolean }): Promise<Program>;
   createCourse(course: { title: string; description: string; slug: string; price: number; programId?: number; published: boolean }): Promise<Course>;
-  createWeek(week: { courseId: number; weekNumber: number; title: string }): Promise<CourseWeek>;
-  createContent(content: { weekId: number; title: string; type: "video" | "reading" | "file" | "link"; contentUrl?: string; contentText?: string; sequenceOrder: number }): Promise<CourseContent>;
-  createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean }): Promise<Quiz>;
-  createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number }): Promise<QuizQuestion>;
+  
+  // Units (Weeks) CRUD
+  createWeek(week: InsertCourseWeek): Promise<CourseWeek>;
+  updateWeek(id: number, week: Partial<InsertCourseWeek>): Promise<CourseWeek | undefined>;
+  deleteWeek(id: number): Promise<boolean>;
+  reorderWeeks(courseId: number, orders: { id: number, weekNumber: number }[]): Promise<void>;
+
+  // Content (Lessons) CRUD
+  createContent(content: InsertCourseContent): Promise<CourseContent>;
+  updateContent(id: number, content: Partial<InsertCourseContent>): Promise<CourseContent | undefined>;
+  deleteContent(id: number): Promise<boolean>;
+  reorderContent(weekId: number, orders: { id: number, sequenceOrder: number }[]): Promise<void>;
+
+  createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean; maxRetakes?: number }): Promise<Quiz>;
+  createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number; explanation?: string }): Promise<QuizQuestion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -190,12 +209,38 @@ export class DatabaseStorage implements IStorage {
     return course;
   }
 
-  async getCourseWeeks(courseId: number): Promise<CourseWeek[]> {
-    return await db.select().from(courseWeeks).where(eq(courseWeeks.courseId, courseId)).orderBy(courseWeeks.weekNumber);
+  async getCourseWeeks(courseId: number): Promise<any[]> {
+    const weeks = await db.query.courseWeeks.findMany({
+      where: eq(courseWeeks.courseId, courseId),
+      orderBy: [courseWeeks.weekNumber],
+      with: {
+        content: {
+          orderBy: [courseContent.sequenceOrder],
+        },
+      },
+    });
+
+    return weeks.map(week => {
+      const { content, ...rest } = week;
+      return {
+        ...rest,
+        lessons: content || []
+      };
+    });
+  }
+
+  async getWeek(id: number): Promise<CourseWeek | undefined> {
+    const [week] = await db.select().from(courseWeeks).where(eq(courseWeeks.id, id));
+    return week;
   }
 
   async getWeekContent(weekId: number): Promise<CourseContent[]> {
     return await db.select().from(courseContent).where(eq(courseContent.weekId, weekId)).orderBy(courseContent.sequenceOrder);
+  }
+
+  async getContent(id: number): Promise<CourseContent | undefined> {
+    const [content] = await db.select().from(courseContent).where(eq(courseContent.id, id));
+    return content;
   }
 
   async getWeekQuiz(weekId: number): Promise<Quiz | undefined> {
@@ -506,8 +551,37 @@ export class DatabaseStorage implements IStorage {
     return quiz;
   }
 
+  async getQuizByUnitId(unitId: number): Promise<Quiz | undefined> {
+    const [quiz] = await db.select().from(quizzes).where(eq(quizzes.weekId, unitId));
+    return quiz;
+  }
+
   async getQuizQuestions(quizId: number): Promise<QuizQuestion[]> {
     return await db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId));
+  }
+
+  async updateQuiz(id: number, data: Partial<{ title: string; passScorePercent: number; maxRetakes: number; isFinalExam: boolean }>): Promise<Quiz | undefined> {
+    const [updated] = await db.update(quizzes).set(data).where(eq(quizzes.id, id)).returning();
+    return updated;
+  }
+
+  async deleteQuiz(id: number): Promise<boolean> {
+    return await db.transaction(async (tx) => {
+      await tx.delete(quizAttempts).where(eq(quizAttempts.quizId, id));
+      await tx.delete(quizQuestions).where(eq(quizQuestions.quizId, id));
+      const [deleted] = await tx.delete(quizzes).where(eq(quizzes.id, id)).returning();
+      return !!deleted;
+    });
+  }
+
+  async updateQuizQuestion(id: number, data: Partial<{ questionText: string; options: string[]; correctOptionIndex: number; explanation: string }>): Promise<QuizQuestion | undefined> {
+    const [updated] = await db.update(quizQuestions).set(data).where(eq(quizQuestions.id, id)).returning();
+    return updated;
+  }
+
+  async deleteQuizQuestion(id: number): Promise<boolean> {
+    const [deleted] = await db.delete(quizQuestions).where(eq(quizQuestions.id, id)).returning();
+    return !!deleted;
   }
 
   async createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt> {
@@ -630,22 +704,113 @@ export class DatabaseStorage implements IStorage {
     return newCourse;
   }
 
-  async createWeek(week: { courseId: number; weekNumber: number; title: string }): Promise<CourseWeek> {
-    const [newWeek] = await db.insert(courseWeeks).values(week).returning();
+  async createWeek(week: InsertCourseWeek): Promise<CourseWeek> {
+    let weekNumber = week.weekNumber;
+    
+    // Auto-ordering logic
+    if (weekNumber === undefined || weekNumber === null) {
+      const [maxWeek] = await db.select({ max: sql<number>`max(${courseWeeks.weekNumber})` })
+        .from(courseWeeks)
+        .where(eq(courseWeeks.courseId, week.courseId));
+      weekNumber = (maxWeek?.max || 0) + 1;
+    }
+
+    const [newWeek] = await db.insert(courseWeeks).values({ ...week, weekNumber }).returning();
     return newWeek;
   }
 
-  async createContent(content: { weekId: number; title: string; type: "video" | "reading" | "file" | "link"; contentUrl?: string; contentText?: string; sequenceOrder: number }): Promise<CourseContent> {
-    const [newContent] = await db.insert(courseContent).values(content).returning();
+  async updateWeek(id: number, data: Partial<InsertCourseWeek>): Promise<CourseWeek | undefined> {
+    const [updated] = await db.update(courseWeeks)
+      .set(data)
+      .where(eq(courseWeeks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWeek(id: number): Promise<boolean> {
+    return await db.transaction(async (tx) => {
+      // 1. Cascade Delete: Content
+      await tx.delete(courseContent).where(eq(courseContent.weekId, id));
+      
+      // 2. Cascade Delete: Quizzes (and their attempts/questions)
+      const weekQuizzes = await tx.select().from(quizzes).where(eq(quizzes.weekId, id));
+      for (const quiz of weekQuizzes) {
+        await tx.delete(quizAttempts).where(eq(quizAttempts.quizId, quiz.id));
+        await tx.delete(quizQuestions).where(eq(quizQuestions.quizId, quiz.id));
+        await tx.delete(quizzes).where(eq(quizzes.id, quiz.id));
+      }
+
+      // 3. Delete the week itself
+      const [deleted] = await tx.delete(courseWeeks).where(eq(courseWeeks.id, id)).returning();
+      return !!deleted;
+    });
+  }
+
+  async reorderWeeks(courseId: number, orders: { id: number, weekNumber: number }[]): Promise<void> {
+    // 1. Validation: No duplicate IDs
+    const ids = orders.map(o => o.id);
+    if (new Set(ids).size !== ids.length) throw new Error("Duplicate unit IDs in reorder request");
+
+    // 2. Transact and Update
+    await db.transaction(async (tx) => {
+      for (const item of orders) {
+        // Ownership validation is built into the where clause
+        await tx.update(courseWeeks)
+          .set({ weekNumber: item.weekNumber })
+          .where(and(eq(courseWeeks.id, item.id), eq(courseWeeks.courseId, courseId)));
+      }
+    });
+  }
+
+  async createContent(content: InsertCourseContent): Promise<CourseContent> {
+    let sequenceOrder = content.sequenceOrder;
+
+    // Auto-ordering logic
+    if (sequenceOrder === undefined || sequenceOrder === null) {
+      const [maxOrder] = await db.select({ max: sql<number>`max(${courseContent.sequenceOrder})` })
+        .from(courseContent)
+        .where(eq(courseContent.weekId, content.weekId));
+      sequenceOrder = (maxOrder?.max || 0) + 1;
+    }
+
+    const [newContent] = await db.insert(courseContent).values({ ...content, sequenceOrder }).returning();
     return newContent;
   }
 
-  async createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean }): Promise<Quiz> {
+  async updateContent(id: number, data: Partial<InsertCourseContent>): Promise<CourseContent | undefined> {
+    const [updated] = await db.update(courseContent)
+      .set(data)
+      .where(eq(courseContent.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContent(id: number): Promise<boolean> {
+    const [deleted] = await db.delete(courseContent).where(eq(courseContent.id, id)).returning();
+    return !!deleted;
+  }
+
+  async reorderContent(weekId: number, orders: { id: number, sequenceOrder: number }[]): Promise<void> {
+    // 1. Validation: No duplicate IDs
+    const ids = orders.map(o => o.id);
+    if (new Set(ids).size !== ids.length) throw new Error("Duplicate lesson IDs in reorder request");
+
+    // 2. Transact and Update
+    await db.transaction(async (tx) => {
+      for (const item of orders) {
+        await tx.update(courseContent)
+          .set({ sequenceOrder: item.sequenceOrder })
+          .where(and(eq(courseContent.id, item.id), eq(courseContent.weekId, weekId)));
+      }
+    });
+  }
+
+  async createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean; maxRetakes?: number }): Promise<Quiz> {
     const [newQuiz] = await db.insert(quizzes).values(quiz).returning();
     return newQuiz;
   }
 
-  async createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number }): Promise<QuizQuestion> {
+  async createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number; explanation?: string }): Promise<QuizQuestion> {
     const [newQuestion] = await db.insert(quizQuestions).values(question).returning();
     return newQuestion;
   }

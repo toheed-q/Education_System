@@ -36,6 +36,8 @@ export const programs = pgTable("programs", {
   description: text("description").notNull(),
   slug: text("slug").notNull().unique(),
   price: integer("price_kes").notNull(), // KES
+  image: text("image"),
+  duration: text("duration"),
   published: boolean("published").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -47,6 +49,9 @@ export const courses = pgTable("courses", {
   slug: text("slug").notNull().unique(),
   price: integer("price_kes").notNull(), // KES
   programId: integer("program_id").references(() => programs.id),
+  learningObjectives: text("learning_objectives"),
+  duration: text("duration"),
+  status: text("status").default("draft"),
   published: boolean("published").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -56,6 +61,11 @@ export const courseWeeks = pgTable("course_weeks", {
   courseId: integer("course_id").notNull().references(() => courses.id),
   weekNumber: integer("week_number").notNull(),
   title: text("title").notNull(),
+  description: text("description"),
+  learningOutcomes: text("learning_outcomes"),
+  topicsCovered: text("topics_covered"),
+  duration: text("duration"),
+  status: text("status").default("draft"),
 });
 
 export const courseContent = pgTable("course_content", {
@@ -64,7 +74,10 @@ export const courseContent = pgTable("course_content", {
   title: text("title").notNull(),
   type: contentTypeEnum("type").notNull(),
   contentUrl: text("content_url"), // For video, file, link
+  videoUrl: text("video_url"), // Dedicated video URL
   contentText: text("content_text"), // For reading
+  resources: jsonb("resources"), // For attachments
+  duration: text("duration"),
   sequenceOrder: integer("sequence_order").notNull(),
 });
 
@@ -74,6 +87,8 @@ export const quizzes = pgTable("quizzes", {
   title: text("title").notNull(),
   passScorePercent: integer("pass_score_percent").default(70).notNull(),
   isFinalExam: boolean("is_final_exam").default(false),
+  maxRetakes: integer("max_retakes").default(3).notNull(),
+  timeLimitMinutes: integer("time_limit_minutes"),
 });
 
 export const quizQuestions = pgTable("quiz_questions", {
@@ -82,6 +97,7 @@ export const quizQuestions = pgTable("quiz_questions", {
   questionText: text("question_text").notNull(),
   options: jsonb("options").notNull(), // Array of strings
   correctOptionIndex: integer("correct_option_index").notNull(),
+  explanation: text("explanation"),
 });
 
 export const quizAttempts = pgTable("quiz_attempts", {
@@ -266,6 +282,10 @@ export const courseWeeksRelations = relations(courseWeeks, ({ one, many }) => ({
   quiz: one(quizzes, { fields: [courseWeeks.id], references: [quizzes.weekId] }), // Assuming 1 quiz per week for simplicity, or 1 quiz relation
 }));
 
+export const courseContentRelations = relations(courseContent, ({ one }) => ({
+  week: one(courseWeeks, { fields: [courseContent.weekId], references: [courseWeeks.id] }),
+}));
+
 export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
   week: one(courseWeeks, { fields: [quizzes.weekId], references: [courseWeeks.id] }),
   questions: many(quizQuestions),
@@ -319,7 +339,9 @@ export type InsertProgram = z.infer<typeof insertProgramSchema>;
 export type Course = typeof courses.$inferSelect;
 export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type CourseWeek = typeof courseWeeks.$inferSelect;
+export type InsertCourseWeek = typeof courseWeeks.$inferInsert;
 export type CourseContent = typeof courseContent.$inferSelect;
+export type InsertCourseContent = typeof courseContent.$inferInsert;
 export type Quiz = typeof quizzes.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
 export type QuizAttempt = typeof quizAttempts.$inferSelect;

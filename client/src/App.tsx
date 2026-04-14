@@ -32,8 +32,12 @@ import AdminVerifications from "@/pages/admin/AdminVerifications";
 import AdminAnalytics from "@/pages/admin/AdminAnalytics";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLogs from "@/pages/admin/AdminLogs";
+import AdminCourseBuilder from "@/pages/admin/AdminCourseBuilder";
 import EnrollmentCallback from "@/pages/EnrollmentCallback";
 import PaymentCallback from "@/pages/PaymentCallback";
+
+const AdminCoursesNew = () => <AdminCourses autoOpen />;
+const AdminProgramsNew = () => <AdminPrograms autoOpen />;
 
 function Router() {
   return (
@@ -70,7 +74,10 @@ function Router() {
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/admin/users" component={AdminUsers} />
       <Route path="/admin/courses" component={AdminCourses} />
+      <Route path="/admin/courses/new" component={AdminCoursesNew} />
+      <Route path="/admin/courses/:id/builder" component={AdminCourseBuilder} />
       <Route path="/admin/programs" component={AdminPrograms} />
+      <Route path="/admin/programs/new" component={AdminProgramsNew} />
       <Route path="/admin/verifications" component={AdminVerifications} />
       <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/admin/settings" component={AdminSettings} />

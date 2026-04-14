@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { BookOpen, Search, Plus, Edit, Eye, Loader2 } from "lucide-react";
+import { BookOpen, Search, Plus, Edit, Eye, List, Loader2 } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
@@ -30,10 +30,10 @@ const courseFormSchema = z.object({
 
 type CourseFormValues = z.infer<typeof courseFormSchema>;
 
-export default function AdminCourses() {
+export default function AdminCourses({ autoOpen = false, ...props }: { autoOpen?: boolean; [key: string]: any }) {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(autoOpen);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
@@ -74,6 +74,7 @@ export default function AdminCourses() {
       });
       setIsDialogOpen(false);
       form.reset();
+      setLocation("/admin/courses");
     },
     onError: (error: any) => {
       toast({
@@ -266,15 +267,15 @@ export default function AdminCourses() {
               <div className="space-y-4">
                 {filteredCourses.map((course: any) => (
                   <div key={course.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg" data-testid={`course-item-${course.id}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Link href={`/admin/courses/${course.id}/builder`} className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
                         <BookOpen className="w-6 h-6 text-blue-600" />
                       </div>
-                      <div>
-                        <h3 className="font-medium text-slate-900">{course.title}</h3>
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-slate-900 hover:text-purple-600 transition-colors">{course.title}</h3>
                         <p className="text-sm text-slate-500">KES {course.price?.toLocaleString()}</p>
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2">
                       <Badge variant={course.published ? 'default' : 'secondary'}>
                         {course.published ? 'Published' : 'Draft'}
@@ -282,6 +283,11 @@ export default function AdminCourses() {
                       <Link href={`/courses/${course.id}`}>
                         <Button size="icon" variant="ghost" data-testid={`button-view-course-${course.id}`}>
                           <Eye className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                      <Link href={`/admin/courses/${course.id}/builder`}>
+                        <Button size="icon" variant="ghost" title="Build Course" data-testid={`button-build-course-${course.id}`}>
+                          <List className="w-4 h-4" />
                         </Button>
                       </Link>
                       <Button size="icon" variant="ghost" data-testid={`button-edit-course-${course.id}`}>

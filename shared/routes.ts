@@ -219,6 +219,136 @@ export const api = {
       },
     },
   },
+  units: {
+    listByCourse: {
+      method: 'GET' as const,
+      path: '/api/courses/:courseId/units',
+      responses: {
+        200: z.array(z.custom<typeof courseWeeks.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/units',
+      input: z.object({
+        courseId: z.number(),
+        title: z.string(),
+        description: z.string().optional(),
+        duration: z.string().optional(),
+        status: z.string().optional(),
+        weekNumber: z.number().optional(),
+      }),
+      responses: {
+        201: z.custom<typeof courseWeeks.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/units/:id',
+      input: z.object({
+        title: z.string().optional(),
+        description: z.string().optional(),
+        learningOutcomes: z.string().optional(),
+        topicsCovered: z.string().optional(),
+        duration: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      responses: {
+        200: z.custom<typeof courseWeeks.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/units/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    reorder: {
+      method: 'PATCH' as const,
+      path: '/api/units/reorder',
+      input: z.object({
+        courseId: z.number(),
+        orders: z.array(z.object({
+          id: z.number(),
+          weekNumber: z.number(),
+        })),
+      }),
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        400: errorSchemas.validation,
+      },
+    },
+  },
+  lessons: {
+    listByUnit: {
+      method: 'GET' as const,
+      path: '/api/units/:unitId/lessons',
+      responses: {
+        200: z.array(z.custom<typeof courseContent.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/lessons',
+      input: z.object({
+        weekId: z.number(),
+        title: z.string(),
+        content: z.string().optional(), // Mapping to contentText usually
+        type: z.enum(["video", "reading", "file", "link"]),
+        videoUrl: z.string().optional(),
+        resources: z.any().optional(),
+        duration: z.string().optional(),
+        sequenceOrder: z.number().optional(),
+      }),
+      responses: {
+        201: z.custom<typeof courseContent.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/lessons/:id',
+      input: z.object({
+        title: z.string().optional(),
+        content: z.string().optional(),
+        type: z.enum(["video", "reading", "file", "link"]).optional(),
+        videoUrl: z.string().optional(),
+        resources: z.any().optional(),
+        duration: z.string().optional(),
+      }),
+      responses: {
+        200: z.custom<typeof courseContent.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/lessons/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    reorder: {
+      method: 'PATCH' as const,
+      path: '/api/lessons/reorder',
+      input: z.object({
+        weekId: z.number(),
+        orders: z.array(z.object({
+          id: z.number(),
+          sequenceOrder: z.number(),
+        })),
+      }),
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        400: errorSchemas.validation,
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

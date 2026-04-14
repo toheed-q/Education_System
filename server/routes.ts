@@ -241,7 +241,13 @@ export async function registerRoutes(
       }
     }
 
-    res.json(user);
+    req.login(user, (err) => {
+      if (err) {
+        console.error("[AUTH] Failed to establish session during sync:", err);
+        return res.status(500).json({ message: "Failed to establish session" });
+      }
+      res.json(user);
+    });
   });
 
   // Programs & Courses
@@ -265,7 +271,9 @@ export async function registerRoutes(
     }
     try {
       const input = api.programs.create.input.parse(req.body);
-      const slug = generateSlug(input.title);
+      const baseSlug = generateSlug(input.title);
+      const existing = await storage.getProgramBySlug(baseSlug);
+      const slug = existing ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
       const program = await storage.createProgram({
         title: input.title,
         description: input.description,
@@ -278,7 +286,8 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
-        res.status(400).json({ message: "Failed to create program" });
+        console.error("Failed to create program:", err);
+        res.status(400).json({ message: err instanceof Error ? err.message : "Failed to create program" });
       }
     }
   });
@@ -295,23 +304,32 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Unauthorized" });
     }
     try {
-      const input = api.courses.create.input.parse(req.body);
-      const slug = generateSlug(input.title);
+      const { title, description, price, programId, published } = req.body;
+      if (!title || typeof title !== 'string' || title.trim().length < 3) {
+        return res.status(400).json({ message: "Title must be at least 3 characters" });
+      }
+      if (!description || typeof description !== 'string' || description.trim().length < 10) {
+        return res.status(400).json({ message: "Description must be at least 10 characters" });
+      }
+      const priceNum = Number(price);
+      if (isNaN(priceNum) || priceNum < 0) {
+        return res.status(400).json({ message: "Price must be a positive number" });
+      }
+      const baseSlug = generateSlug(title.trim());
+      const existing = await storage.getCourseBySlug(baseSlug);
+      const slug = existing ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
       const course = await storage.createCourse({
-        title: input.title,
-        description: input.description,
+        title: title.trim(),
+        description: description.trim(),
         slug,
-        price: input.price,
-        programId: input.programId ?? undefined,
-        published: input.published ?? false,
+        price: priceNum,
+        programId: programId ? Number(programId) : undefined,
+        published: published === true || published === 'true',
       });
       res.status(201).json(course);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        res.status(400).json({ message: err.errors[0].message });
-      } else {
-        res.status(400).json({ message: "Failed to create course" });
-      }
+      console.error("Failed to create course:", err);
+      res.status(500).json({ message: err instanceof Error ? err.message : "Failed to create course" });
     }
   });
 
@@ -473,6 +491,211 @@ Only respond with the description text, nothing else.`
     } catch (error: any) {
       console.error("AI description generation error:", error);
       res.status(500).json({ message: error.message || "Failed to generate description" });
+    }
+  });
+
+  // Units Management
+  app.get(api.units.listByCourse.path, async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    const units = await storage.getCourseWeeks(courseId);
+    res.json(units);
+  });
+
+  app.post(api.units.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const input = api.units.create.input.parse(req.body);
+      const unit = await storage.createWeek({
+        ...input,
+        weekNumber: input.weekNumber ?? 0,
+      });
+      res.status(201).json(unit);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to create unit" });
+      }
+    }
+  });
+
+  app.put(api.units.update.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const id = Number(req.params.id);
+      const input = api.units.update.input.parse(req.body);
+      const updated = await storage.updateWeek(id, input);
+      if (!updated) return res.status(404).json({ message: "Unit not found" });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to update unit" });
+      }
+    }
+  });
+
+  app.delete(api.units.delete.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    const id = Number(req.params.id);
+    const success = await storage.deleteWeek(id);
+    if (!success) return res.status(404).json({ message: "Unit not found" });
+    res.json({ success: true });
+  });
+
+  app.patch(api.units.reorder.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const { courseId, orders } = api.units.reorder.input.parse(req.body);
+      
+      // Validation: Ensure all IDs belong to the course
+      const existingUnits = await storage.getCourseWeeks(courseId);
+      const existingIds = new Set(existingUnits.map(u => u.id));
+      
+      if (!orders.every(o => existingIds.has(o.id))) {
+        return res.status(400).json({ message: "Invalid unit IDs for this course" });
+      }
+
+      // Validation: Ensure sequential weekNumbers
+      const weekNumbers = orders.map(o => o.weekNumber).sort((a, b) => a - b);
+      for (let i = 0; i < weekNumbers.length; i++) {
+        if (weekNumbers[i] !== i + 1) {
+          return res.status(400).json({ message: "Week numbers must be sequential starting from 1" });
+        }
+      }
+
+      await storage.reorderWeeks(courseId, orders);
+      res.json({ success: true });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to reorder units" });
+      }
+    }
+  });
+
+  // Lessons Management
+  app.get(api.lessons.listByUnit.path, async (req, res) => {
+    const unitId = Number(req.params.unitId);
+    const content = await storage.getWeekContent(unitId);
+    res.json(content);
+  });
+
+  app.post(api.lessons.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const input = api.lessons.create.input.parse(req.body);
+      const lesson = await storage.createContent({
+        weekId: input.weekId,
+        title: input.title,
+        type: input.type,
+        videoUrl: input.videoUrl,
+        resources: input.resources,
+        duration: input.duration,
+        sequenceOrder: input.sequenceOrder,
+        contentText: input.content, // Map content -> contentText
+      });
+      res.status(201).json(lesson);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: err instanceof Error ? err.message : "Failed to create lesson" });
+      }
+    }
+  });
+
+  app.put(api.lessons.update.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const id = Number(req.params.id);
+      const input = api.lessons.update.input.parse(req.body);
+      const updated = await storage.updateContent(id, {
+        ...input,
+        contentText: input.content, // Map content -> contentText
+      });
+      if (!updated) return res.status(404).json({ message: "Lesson not found" });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to update lesson" });
+      }
+    }
+  });
+
+  app.delete(api.lessons.delete.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    const id = Number(req.params.id);
+    const success = await storage.deleteContent(id);
+    if (!success) return res.status(404).json({ message: "Lesson not found" });
+    res.json({ success: true });
+  });
+
+  app.patch(api.lessons.reorder.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const { weekId, orders } = api.lessons.reorder.input.parse(req.body);
+      
+      // Validation: Ensure all IDs belong to the unit
+      const existingLessons = await storage.getWeekContent(weekId);
+      const existingIds = new Set(existingLessons.map(l => l.id));
+      
+      if (!orders.every(o => existingIds.has(o.id))) {
+        return res.status(400).json({ message: "Invalid lesson IDs for this unit" });
+      }
+
+      // Validation: Ensure sequential sequenceOrders
+      const ordersSorted = orders.map(o => o.sequenceOrder).sort((a, b) => a - b);
+      for (let i = 0; i < ordersSorted.length; i++) {
+        if (ordersSorted[i] !== i + 1) {
+          return res.status(400).json({ message: "Sequence numbers must be sequential starting from 1" });
+        }
+      }
+
+      await storage.reorderContent(weekId, orders);
+      res.json({ success: true });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        res.status(400).json({ message: "Failed to reorder lessons" });
+      }
     }
   });
 
@@ -1420,7 +1643,110 @@ Only respond with the description text, nothing else.`
     res.json({ enrolled: true, progress });
   });
 
-  // Quizzes
+  // Quiz Builder APIs (Admin)
+  const isAdmin = (req: any) => req.isAuthenticated() && ["admin", "super_admin"].includes((req.user as any).role);
+
+  app.get("/api/units/:unitId/quiz", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const unitId = Number(req.params.unitId);
+    const quiz = await storage.getQuizByUnitId(unitId);
+    if (!quiz) return res.json(null);
+    const questions = await storage.getQuizQuestions(quiz.id);
+    res.json({ ...quiz, questions });
+  });
+
+  app.post("/api/quizzes", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const { weekId, title, passScorePercent, maxRetakes, isFinalExam } = req.body;
+    if (!weekId || !title) return res.status(400).json({ message: "weekId and title are required" });
+    const existing = await storage.getQuizByUnitId(Number(weekId));
+    if (existing) return res.status(409).json({ message: "A quiz already exists for this unit" });
+    const quiz = await storage.createQuiz({
+      weekId: Number(weekId),
+      title,
+      passScorePercent: Number(passScorePercent ?? 70),
+      maxRetakes: Number(maxRetakes ?? 3),
+      isFinalExam: isFinalExam === true || isFinalExam === "true",
+    });
+    res.status(201).json(quiz);
+  });
+
+  app.put("/api/quizzes/:id", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const id = Number(req.params.id);
+    const { title, passScorePercent, maxRetakes, isFinalExam } = req.body;
+    const updated = await storage.updateQuiz(id, {
+      ...(title !== undefined && { title }),
+      ...(passScorePercent !== undefined && { passScorePercent: Number(passScorePercent) }),
+      ...(maxRetakes !== undefined && { maxRetakes: Number(maxRetakes) }),
+      ...(isFinalExam !== undefined && { isFinalExam: isFinalExam === true || isFinalExam === "true" }),
+    });
+    if (!updated) return res.status(404).json({ message: "Quiz not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/quizzes/:id", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const id = Number(req.params.id);
+    const success = await storage.deleteQuiz(id);
+    if (!success) return res.status(404).json({ message: "Quiz not found" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/quizzes/:quizId/questions", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const questions = await storage.getQuizQuestions(Number(req.params.quizId));
+    res.json(questions);
+  });
+
+  app.post("/api/quiz-questions", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const { quizId, questionText, optionA, optionB, optionC, optionD, correctOptionIndex, explanation } = req.body;
+    if (!quizId || !questionText || !optionA || !optionB || !optionC || !optionD) {
+      return res.status(400).json({ message: "quizId, questionText, and all 4 options are required" });
+    }
+    const idx = Number(correctOptionIndex);
+    if (isNaN(idx) || idx < 0 || idx > 3) {
+      return res.status(400).json({ message: "correctOptionIndex must be 0–3" });
+    }
+    const question = await storage.createQuizQuestion({
+      quizId: Number(quizId),
+      questionText,
+      options: [optionA, optionB, optionC, optionD],
+      correctOptionIndex: idx,
+      explanation: explanation || undefined,
+    });
+    res.status(201).json(question);
+  });
+
+  app.put("/api/quiz-questions/:id", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const id = Number(req.params.id);
+    const { questionText, optionA, optionB, optionC, optionD, correctOptionIndex, explanation } = req.body;
+    const updateData: any = {};
+    if (questionText !== undefined) updateData.questionText = questionText;
+    if (optionA !== undefined && optionB !== undefined && optionC !== undefined && optionD !== undefined) {
+      updateData.options = [optionA, optionB, optionC, optionD];
+    }
+    if (correctOptionIndex !== undefined) {
+      const idx = Number(correctOptionIndex);
+      if (isNaN(idx) || idx < 0 || idx > 3) return res.status(400).json({ message: "correctOptionIndex must be 0–3" });
+      updateData.correctOptionIndex = idx;
+    }
+    if (explanation !== undefined) updateData.explanation = explanation;
+    const updated = await storage.updateQuizQuestion(id, updateData);
+    if (!updated) return res.status(404).json({ message: "Question not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/quiz-questions/:id", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const success = await storage.deleteQuizQuestion(Number(req.params.id));
+    if (!success) return res.status(404).json({ message: "Question not found" });
+    res.json({ success: true });
+  });
+
+  // Quizzes (student-facing)
   app.get("/api/quizzes/:id", async (req, res) => {
     const quizId = Number(req.params.id);
     const quiz = await storage.getQuiz(quizId);
@@ -1440,7 +1766,7 @@ Only respond with the description text, nothing else.`
     if (week) {
       const course = await storage.getCourse(week.courseId);
       courseSlug = course?.slug || "";
-      courseId = week.courseId;
+      courseId = week.courseId ?? 0;
     }
     
     res.json({ ...quiz, questions: questionsWithoutAnswers, courseSlug, courseId });

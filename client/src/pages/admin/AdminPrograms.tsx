@@ -27,10 +27,10 @@ const programFormSchema = z.object({
 
 type ProgramFormValues = z.infer<typeof programFormSchema>;
 
-export default function AdminPrograms() {
+export default function AdminPrograms({ autoOpen = false, ...props }: { autoOpen?: boolean; [key: string]: any }) {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(autoOpen);
   const [searchTerm, setSearchTerm] = useState("");
   const [aiTone, setAiTone] = useState("");
   const { toast } = useToast();
@@ -103,6 +103,7 @@ export default function AdminPrograms() {
       });
       setIsDialogOpen(false);
       form.reset();
+      setLocation("/admin/programs");
     },
     onError: (error: any) => {
       toast({
