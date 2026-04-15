@@ -116,6 +116,9 @@ export const enrollments = pgTable("enrollments", {
   programId: integer("program_id").references(() => programs.id),
   enrolledAt: timestamp("enrolled_at").defaultNow(),
   progress: integer("progress").default(0),
+  // Completion tracking
+  status: text("status").default("in_progress"), // 'in_progress' | 'completed'
+  completedAt: timestamp("completed_at"),
 });
 
 export const completedContent = pgTable("completed_content", {
@@ -360,6 +363,7 @@ export type VerificationRequest = typeof verificationRequests.$inferSelect;
 export type InsertVerificationRequest = z.infer<typeof insertVerificationRequestSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type CompletedContent = typeof completedContent.$inferSelect;
 export type SuperCategory = "school_tutoring" | "higher_education" | "professional_skills";
 export type VerificationStatus = "pending" | "approved" | "rejected" | "not_applied";
 

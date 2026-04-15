@@ -1,13 +1,14 @@
 import { db } from "./db";
 import {
-  users, programs, courses, courseWeeks, courseContent, quizzes, quizQuestions, quizAttempts,
+  users, programs, courses, courseWeeks, courseContent, completedContent, quizzes, quizQuestions, quizAttempts,
   tutorProfiles, bookings, reviews, messages, enrollments, certificates, verificationRequests, withdrawals,
   bookingPaymentIntents, enrollmentPaymentIntents, notifications,
   type User, type InsertUser, type Program, type Course, type CourseWeek, type CourseContent,
   type Quiz, type QuizQuestion, type QuizAttempt, type TutorProfile, type Booking, type Review, type Message,
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
   type InsertQuizAttempt, type BookingPaymentIntent, type EnrollmentPaymentIntent, type VerificationRequest, 
-  type Notification, type InsertNotification, type InsertCourseWeek, type InsertCourseContent
+  type Notification, type InsertNotification, type InsertCourseWeek, type InsertCourseContent,
+  type CompletedContent
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import session from "express-session";
@@ -132,6 +133,17 @@ export interface IStorage {
 
   createQuiz(quiz: { weekId: number; title: string; passScorePercent: number; isFinalExam: boolean; maxRetakes?: number }): Promise<Quiz>;
   createQuizQuestion(question: { quizId: number; questionText: string; options: string[]; correctOptionIndex: number; explanation?: string }): Promise<QuizQuestion>;
+
+  // ─── Completion Tracking ────────────────────────────────────────────────────
+  markLessonComplete(userId: number, contentId: number): Promise<void>;
+  isLessonCompleted(userId: number, contentId: number): Promise<boolean>;
+  getCompletedLessonIds(userId: number): Promise<number[]>;
+  getBestQuizScore(userId: number, quizId: number): Promise<number | null>;
+  checkUnitCompletion(userId: number, unitId: number): Promise<boolean>;
+  checkCourseCompletion(userId: number, courseId: number): Promise<boolean>;
+  checkProgramCompletion(userId: number, programId: number): Promise<boolean>;
+  updateEnrollmentProgress(userId: number, courseId: number): Promise<void>;
+  getCourseProgressDetails(userId: number, courseId: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -891,6 +903,257 @@ export class DatabaseStorage implements IStorage {
       .returning();
       
     return updatedUser;
+  }
+
+  // ─── Completion Tracking Implementations ───────────────────────────────────
+
+  /**
+   * Idempotently marks a lesson as complete for a user.
+   * Safe to call multiple times — second call is a no-op.
+   */
+  async markLessonComplete(userId: number, contentId: number): Promise<void> {
+    const [existing] = await db.select()
+      .from(completedContent)
+      .where(and(eq(completedContent.userId, userId), eq(completedContent.contentId, contentId)));
+    if (existing) return; // Already marked — idempotent
+    await db.insert(completedContent).values({ userId, contentId });
+  }
+
+  async isLessonCompleted(userId: number, contentId: number): Promise<boolean> {
+    const [existing] = await db.select()
+      .from(completedContent)
+      .where(and(eq(completedContent.userId, userId), eq(completedContent.contentId, contentId)));
+    return !!existing;
+  }
+
+  /** Returns all content IDs the user has marked as complete. */
+  async getCompletedLessonIds(userId: number): Promise<number[]> {
+    const results = await db
+      .select({ contentId: completedContent.contentId })
+      .from(completedContent)
+      .where(eq(completedContent.userId, userId));
+    return results.map(r => r.contentId);
+  }
+
+  /**
+   * Returns the user's best (highest) score for a given quiz.
+   * Returns null if the user has never attempted the quiz.
+   */
+  async getBestQuizScore(userId: number, quizId: number): Promise<number | null> {
+    const results = await db
+      .select({ score: quizAttempts.scorePercent })
+      .from(quizAttempts)
+      .where(and(eq(quizAttempts.userId, userId), eq(quizAttempts.quizId, quizId)))
+      .orderBy(desc(quizAttempts.scorePercent))
+      .limit(1);
+    if (results.length === 0) return null;
+    return results[0].score;
+  }
+
+  /**
+   * Unit complete = ALL lessons done + quiz passed (if quiz exists).
+   * Edge cases: empty unit → true; unit without quiz → lessons only.
+   */
+  async checkUnitCompletion(userId: number, unitId: number): Promise<boolean> {
+    const lessons = await db
+      .select()
+      .from(courseContent)
+      .where(eq(courseContent.weekId, unitId));
+
+    // Check lessons (skip check entirely if unit is empty)
+    if (lessons.length > 0) {
+      const completedIds = await this.getCompletedLessonIds(userId);
+      const completedSet = new Set(completedIds);
+      const allLessonsDone = lessons.every(l => completedSet.has(l.id));
+      if (!allLessonsDone) return false;
+    }
+
+    // Check quiz (skip if no quiz on this unit)
+    const quiz = await this.getWeekQuiz(unitId);
+    if (quiz) {
+      const bestScore = await this.getBestQuizScore(userId, quiz.id);
+      if (bestScore === null || bestScore < quiz.passScorePercent) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Course complete = ALL units complete.
+   * Final exam (isFinalExam quiz) is automatically included via unit completion.
+   */
+  async checkCourseCompletion(userId: number, courseId: number): Promise<boolean> {
+    const units = await db
+      .select()
+      .from(courseWeeks)
+      .where(eq(courseWeeks.courseId, courseId));
+
+    if (units.length === 0) return false; // No units → not complete
+
+    for (const unit of units) {
+      const done = await this.checkUnitCompletion(userId, unit.id);
+      if (!done) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Program complete = ALL courses in the program complete.
+   */
+  async checkProgramCompletion(userId: number, programId: number): Promise<boolean> {
+    const programCourses = await db
+      .select()
+      .from(courses)
+      .where(eq(courses.programId, programId));
+
+    if (programCourses.length === 0) return false;
+
+    for (const course of programCourses) {
+      const done = await this.checkCourseCompletion(userId, course.id);
+      if (!done) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Recalculates and persists enrollment progress % and status.
+   * Triggers for both direct course enrollments and parent program enrollments.
+   * Only updates the affected course/program — not the entire database.
+   */
+  async updateEnrollmentProgress(userId: number, courseId: number): Promise<void> {
+    const units = await db
+      .select()
+      .from(courseWeeks)
+      .where(eq(courseWeeks.courseId, courseId));
+
+    if (units.length === 0) return;
+
+    // Count how many units are complete
+    let completedUnits = 0;
+    for (const unit of units) {
+      const done = await this.checkUnitCompletion(userId, unit.id);
+      if (done) completedUnits++;
+    }
+
+    const progressPercent = Math.round((completedUnits / units.length) * 100);
+    const isCourseComplete = completedUnits === units.length;
+
+    // ── Update direct course enrollment ──────────────────────────────────────
+    const [directEnrollment] = await db
+      .select()
+      .from(enrollments)
+      .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
+
+    if (directEnrollment) {
+      const updateData: Record<string, any> = {
+        progress: progressPercent,
+        status: isCourseComplete ? 'completed' : 'in_progress',
+      };
+      // Only set completedAt once (don't overwrite an existing timestamp)
+      if (isCourseComplete && !directEnrollment.completedAt) {
+        updateData.completedAt = new Date();
+      }
+      await db.update(enrollments)
+        .set(updateData)
+        .where(eq(enrollments.id, directEnrollment.id));
+    }
+
+    // ── Update parent program enrollment (if the course belongs to a program) ─
+    const course = await this.getCourse(courseId);
+    if (course?.programId) {
+      const [programEnrollment] = await db
+        .select()
+        .from(enrollments)
+        .where(and(eq(enrollments.userId, userId), eq(enrollments.programId, course.programId)));
+
+      if (programEnrollment) {
+        const programCourses = await db
+          .select()
+          .from(courses)
+          .where(eq(courses.programId, course.programId));
+
+        let completedCourses = 0;
+        for (const c of programCourses) {
+          const done = await this.checkCourseCompletion(userId, c.id);
+          if (done) completedCourses++;
+        }
+
+        const programProgress = Math.round((completedCourses / programCourses.length) * 100);
+        const isProgramComplete = completedCourses === programCourses.length;
+
+        const programUpdateData: Record<string, any> = {
+          progress: programProgress,
+          status: isProgramComplete ? 'completed' : 'in_progress',
+        };
+        if (isProgramComplete && !programEnrollment.completedAt) {
+          programUpdateData.completedAt = new Date();
+        }
+        await db.update(enrollments)
+          .set(programUpdateData)
+          .where(eq(enrollments.id, programEnrollment.id));
+      }
+    }
+  }
+
+  /**
+   * Returns a detailed progress breakdown for a course:
+   * units, lesson counts, quiz scores, overall % and status.
+   */
+  async getCourseProgressDetails(userId: number, courseId: number): Promise<any> {
+    const units = await db
+      .select()
+      .from(courseWeeks)
+      .where(eq(courseWeeks.courseId, courseId))
+      .orderBy(courseWeeks.weekNumber);
+
+    const completedIds = await this.getCompletedLessonIds(userId);
+    const completedSet = new Set(completedIds);
+
+    const unitDetails = await Promise.all(units.map(async (unit) => {
+      const lessons = await db
+        .select()
+        .from(courseContent)
+        .where(eq(courseContent.weekId, unit.id))
+        .orderBy(courseContent.sequenceOrder);
+
+      const quiz = await this.getWeekQuiz(unit.id);
+      let quizPassed = false;
+      let bestScore: number | null = null;
+
+      if (quiz) {
+        bestScore = await this.getBestQuizScore(userId, quiz.id);
+        quizPassed = bestScore !== null && bestScore >= quiz.passScorePercent;
+      }
+
+      const isComplete = await this.checkUnitCompletion(userId, unit.id);
+
+      return {
+        unitId: unit.id,
+        unitTitle: unit.title,
+        weekNumber: unit.weekNumber,
+        totalLessons: lessons.length,
+        completedLessons: lessons.filter(l => completedSet.has(l.id)).length,
+        hasQuiz: !!quiz,
+        quizPassScore: quiz?.passScorePercent ?? null,
+        quizPassed,
+        bestScore,
+        isComplete,
+      };
+    }));
+
+    const completedUnits = unitDetails.filter(u => u.isComplete).length;
+    const totalUnits = units.length;
+    const progressPercent = totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0;
+    const courseComplete = totalUnits > 0 && completedUnits === totalUnits;
+
+    return {
+      courseId,
+      totalUnits,
+      completedUnits,
+      progress: progressPercent,
+      status: courseComplete ? 'completed' : 'in_progress',
+      units: unitDetails,
+    };
   }
 }
 

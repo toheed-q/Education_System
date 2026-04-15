@@ -614,7 +614,7 @@ Only respond with the description text, nothing else.`
         videoUrl: input.videoUrl,
         resources: input.resources,
         duration: input.duration,
-        sequenceOrder: input.sequenceOrder,
+        sequenceOrder: input.sequenceOrder ?? 0,
         contentText: input.content, // Map content -> contentText
       });
       res.status(201).json(lesson);
@@ -1643,6 +1643,87 @@ Only respond with the description text, nothing else.`
     res.json({ enrolled: true, progress });
   });
 
+  // ─── Completion Tracking Routes ─────────────────────────────────────────────
+
+  /**
+   * POST /api/progress/lesson-complete
+   * Marks a lesson as complete for the authenticated user (idempotent).
+   * Immediately triggers the enrollment progress cascade.
+   * Body: { lessonId: number }
+   */
+  app.post("/api/progress/lesson-complete", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const userId = (req.user as any).id;
+    const lessonId = Number(req.body.lessonId);
+
+    if (!lessonId || isNaN(lessonId)) {
+      return res.status(400).json({ message: "lessonId is required and must be a number" });
+    }
+
+    try {
+      // Verify the lesson exists
+      const lesson = await storage.getContent(lessonId);
+      if (!lesson) return res.status(404).json({ message: "Lesson not found" });
+
+      // Verify the week/unit containing the lesson exists
+      const unit = await storage.getWeek(lesson.weekId);
+      if (!unit) return res.status(404).json({ message: "Unit not found" });
+
+      // Enforce enrollment check — never trust the frontend
+      const isEnrolled = await storage.isUserEnrolledInCourse(userId, unit.courseId);
+      if (!isEnrolled) {
+        return res.status(403).json({ message: "You are not enrolled in this course" });
+      }
+
+      // Mark lesson complete (idempotent — safe to call multiple times)
+      await storage.markLessonComplete(userId, lessonId);
+
+      // Cascade: recalculate and persist enrollment progress
+      await storage.updateEnrollmentProgress(userId, unit.courseId);
+
+      // Return updated progress snapshot
+      const progressDetails = await storage.getCourseProgressDetails(userId, unit.courseId);
+
+      return res.json({
+        success: true,
+        message: "Lesson marked as complete",
+        progress: progressDetails,
+      });
+    } catch (err) {
+      console.error("[progress/lesson-complete] Error:", err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  /**
+   * GET /api/progress/course/:courseId
+   * Returns a full, unit-by-unit progress breakdown for the authenticated user.
+   * Response includes: overall %, completed/total units, per-unit quiz status.
+   */
+  app.get("/api/progress/course/:courseId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const userId = (req.user as any).id;
+    const courseId = Number(req.params.courseId);
+
+    try {
+      const course = await storage.getCourse(courseId);
+      if (!course) return res.status(404).json({ message: "Course not found" });
+
+      const isEnrolled = await storage.isUserEnrolledInCourse(userId, courseId);
+      if (!isEnrolled) {
+        return res.status(403).json({ message: "You are not enrolled in this course" });
+      }
+
+      const progressDetails = await storage.getCourseProgressDetails(userId, courseId);
+      return res.json(progressDetails);
+    } catch (err) {
+      console.error("[progress/course] Error:", err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Quiz Builder APIs (Admin)
   const isAdmin = (req: any) => req.isAuthenticated() && ["admin", "super_admin"].includes((req.user as any).role);
 
@@ -1800,7 +1881,18 @@ Only respond with the description text, nothing else.`
       scorePercent,
       passed,
     });
-    
+
+    // ── Cascade: recalculate enrollment progress after every quiz submission ──
+    try {
+      const quizWeek = await storage.getWeek(quiz.weekId);
+      if (quizWeek) {
+        await storage.updateEnrollmentProgress(userId, quizWeek.courseId);
+      }
+    } catch (cascadeErr) {
+      // Non-fatal — log and continue so the student still gets their score
+      console.error("[quiz/submit] Progress cascade failed:", cascadeErr);
+    }
+
     res.json({
       scorePercent,
       passed,
