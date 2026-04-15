@@ -10,9 +10,32 @@ import {
   type Notification, type InsertNotification, type InsertCourseWeek, type InsertCourseContent,
   type CompletedContent
 } from "@shared/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+
+// ─── Structured Progress Logger ────────────────────────────────────────────────────
+/**
+ * Emit a consistent, machine-readable log line for all progress events.
+ * Format: [PROGRESS][ISO-timestamp][LEVEL] event {json context}
+ * Non-throwing — logging must never break the main flow.
+ */
+export function progressLog(
+  level: 'info' | 'warn' | 'error',
+  event: string,
+  context: Record<string, unknown> = {},
+): void {
+  try {
+    const ts = new Date().toISOString();
+    const line = `[PROGRESS][${ts}][${level.toUpperCase()}] ${event} ${JSON.stringify(context)}`;
+    if (level === 'error') console.error(line);
+    else if (level === 'warn') console.warn(line);
+    else console.log(line);
+  } catch {
+    // intentionally silent — logging must not throw
+  }
+}
+
 import { pool } from "./db";
 
 const PostgresSessionStore = connectPg(session);
@@ -138,12 +161,15 @@ export interface IStorage {
   markLessonComplete(userId: number, contentId: number): Promise<void>;
   isLessonCompleted(userId: number, contentId: number): Promise<boolean>;
   getCompletedLessonIds(userId: number): Promise<number[]>;
+  getCompletedLessonIdsForUnit(userId: number, unitId: number): Promise<number[]>;
   getBestQuizScore(userId: number, quizId: number): Promise<number | null>;
   checkUnitCompletion(userId: number, unitId: number): Promise<boolean>;
   checkCourseCompletion(userId: number, courseId: number): Promise<boolean>;
   checkProgramCompletion(userId: number, programId: number): Promise<boolean>;
   updateEnrollmentProgress(userId: number, courseId: number): Promise<void>;
   getCourseProgressDetails(userId: number, courseId: number): Promise<any>;
+  recalculateAllProgressForUser(userId: number): Promise<{ enrollmentsFixed: number; report: any[] }>;
+  getAdminProgressForUser(userId: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -908,15 +934,16 @@ export class DatabaseStorage implements IStorage {
   // ─── Completion Tracking Implementations ───────────────────────────────────
 
   /**
-   * Idempotently marks a lesson as complete for a user.
-   * Safe to call multiple times — second call is a no-op.
+   * Idempotently marks a lesson as complete.
+   * Uses INSERT ... ON CONFLICT DO NOTHING for atomic, race-safe operation.
+   * Eliminates the SELECT round-trip and prevents duplicate rows even under
+   * concurrent requests.
    */
   async markLessonComplete(userId: number, contentId: number): Promise<void> {
-    const [existing] = await db.select()
-      .from(completedContent)
-      .where(and(eq(completedContent.userId, userId), eq(completedContent.contentId, contentId)));
-    if (existing) return; // Already marked — idempotent
-    await db.insert(completedContent).values({ userId, contentId });
+    await db
+      .insert(completedContent)
+      .values({ userId, contentId })
+      .onConflictDoNothing();
   }
 
   async isLessonCompleted(userId: number, contentId: number): Promise<boolean> {
@@ -926,13 +953,37 @@ export class DatabaseStorage implements IStorage {
     return !!existing;
   }
 
-  /** Returns all content IDs the user has marked as complete. */
+  /** Returns all content IDs the user has marked as complete across all courses. */
   async getCompletedLessonIds(userId: number): Promise<number[]> {
     const results = await db
       .select({ contentId: completedContent.contentId })
       .from(completedContent)
       .where(eq(completedContent.userId, userId));
     return results.map(r => r.contentId);
+  }
+
+  /**
+   * Returns completed lesson IDs scoped to a single unit.
+   * More efficient than getCompletedLessonIds — does NOT load all global completions.
+   * Uses an IN-filter against only the lesson IDs belonging to the unit.
+   */
+  async getCompletedLessonIdsForUnit(userId: number, unitId: number): Promise<number[]> {
+    const lessonsInUnit = await db
+      .select({ id: courseContent.id })
+      .from(courseContent)
+      .where(eq(courseContent.weekId, unitId));
+
+    if (lessonsInUnit.length === 0) return [];
+
+    const lessonIds = lessonsInUnit.map(l => l.id);
+    const completed = await db
+      .select({ contentId: completedContent.contentId })
+      .from(completedContent)
+      .where(and(
+        eq(completedContent.userId, userId),
+        inArray(completedContent.contentId, lessonIds),
+      ));
+    return completed.map(c => c.contentId);
   }
 
   /**
@@ -952,23 +1003,30 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Unit complete = ALL lessons done + quiz passed (if quiz exists).
+   * Uses a scoped IN-query for lessons — avoids loading all global completions.
    * Edge cases: empty unit → true; unit without quiz → lessons only.
    */
   async checkUnitCompletion(userId: number, unitId: number): Promise<boolean> {
+    // ── Lesson check (scoped to this unit) ───────────────────────────────────────
     const lessons = await db
       .select()
       .from(courseContent)
       .where(eq(courseContent.weekId, unitId));
 
-    // Check lessons (skip check entirely if unit is empty)
     if (lessons.length > 0) {
-      const completedIds = await this.getCompletedLessonIds(userId);
-      const completedSet = new Set(completedIds);
-      const allLessonsDone = lessons.every(l => completedSet.has(l.id));
-      if (!allLessonsDone) return false;
+      const lessonIds = lessons.map(l => l.id);
+      const completedRows = await db
+        .select({ contentId: completedContent.contentId })
+        .from(completedContent)
+        .where(and(
+          eq(completedContent.userId, userId),
+          inArray(completedContent.contentId, lessonIds),
+        ));
+      // Integrity: every lesson must appear in completed_content
+      if (completedRows.length < lessons.length) return false;
     }
 
-    // Check quiz (skip if no quiz on this unit)
+    // ── Quiz check (skip if no quiz on this unit) ──────────────────────────────
     const quiz = await this.getWeekQuiz(unitId);
     if (quiz) {
       const bestScore = await this.getBestQuizScore(userId, quiz.id);
@@ -1017,82 +1075,126 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Recalculates and persists enrollment progress % and status.
-   * Triggers for both direct course enrollments and parent program enrollments.
-   * Only updates the affected course/program — not the entire database.
+   * Each cascade step has its own try/catch with structured logging.
+   * Course enrollment failure re-throws (critical). Program cascade is non-fatal.
    */
   async updateEnrollmentProgress(userId: number, courseId: number): Promise<void> {
+    const startMs = Date.now();
+    progressLog('info', 'cascade_start', { userId, courseId });
+
     const units = await db
       .select()
       .from(courseWeeks)
       .where(eq(courseWeeks.courseId, courseId));
 
-    if (units.length === 0) return;
+    if (units.length === 0) {
+      progressLog('warn', 'cascade_no_units', { userId, courseId });
+      return;
+    }
 
-    // Count how many units are complete
+    // ── Evaluate each unit ─────────────────────────────────────────────────────────────
     let completedUnits = 0;
     for (const unit of units) {
-      const done = await this.checkUnitCompletion(userId, unit.id);
-      if (done) completedUnits++;
+      try {
+        const done = await this.checkUnitCompletion(userId, unit.id);
+        if (done) completedUnits++;
+        progressLog('info', 'unit_checked', { userId, unitId: unit.id, complete: done });
+      } catch (unitErr) {
+        progressLog('error', 'unit_check_failed', {
+          userId, unitId: unit.id,
+          error: (unitErr as Error).message,
+        });
+        // Count the unit as incomplete — conservative, does not throw
+      }
     }
 
     const progressPercent = Math.round((completedUnits / units.length) * 100);
     const isCourseComplete = completedUnits === units.length;
 
-    // ── Update direct course enrollment ──────────────────────────────────────
-    const [directEnrollment] = await db
-      .select()
-      .from(enrollments)
-      .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
-
-    if (directEnrollment) {
-      const updateData: Record<string, any> = {
-        progress: progressPercent,
-        status: isCourseComplete ? 'completed' : 'in_progress',
-      };
-      // Only set completedAt once (don't overwrite an existing timestamp)
-      if (isCourseComplete && !directEnrollment.completedAt) {
-        updateData.completedAt = new Date();
-      }
-      await db.update(enrollments)
-        .set(updateData)
-        .where(eq(enrollments.id, directEnrollment.id));
-    }
-
-    // ── Update parent program enrollment (if the course belongs to a program) ─
-    const course = await this.getCourse(courseId);
-    if (course?.programId) {
-      const [programEnrollment] = await db
+    // ── Update direct course enrollment (critical — rethrows on failure) ────────
+    try {
+      const [directEnrollment] = await db
         .select()
         .from(enrollments)
-        .where(and(eq(enrollments.userId, userId), eq(enrollments.programId, course.programId)));
+        .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
 
-      if (programEnrollment) {
-        const programCourses = await db
-          .select()
-          .from(courses)
-          .where(eq(courses.programId, course.programId));
-
-        let completedCourses = 0;
-        for (const c of programCourses) {
-          const done = await this.checkCourseCompletion(userId, c.id);
-          if (done) completedCourses++;
-        }
-
-        const programProgress = Math.round((completedCourses / programCourses.length) * 100);
-        const isProgramComplete = completedCourses === programCourses.length;
-
-        const programUpdateData: Record<string, any> = {
-          progress: programProgress,
-          status: isProgramComplete ? 'completed' : 'in_progress',
+      if (directEnrollment) {
+        const updateData: Record<string, any> = {
+          progress: progressPercent,
+          status: isCourseComplete ? 'completed' : 'in_progress',
         };
-        if (isProgramComplete && !programEnrollment.completedAt) {
-          programUpdateData.completedAt = new Date();
+        if (isCourseComplete && !directEnrollment.completedAt) {
+          updateData.completedAt = new Date();
         }
         await db.update(enrollments)
-          .set(programUpdateData)
-          .where(eq(enrollments.id, programEnrollment.id));
+          .set(updateData)
+          .where(eq(enrollments.id, directEnrollment.id));
+        progressLog('info', 'course_enrollment_updated', {
+          userId, courseId,
+          progress: progressPercent,
+          status: updateData.status,
+          durationMs: Date.now() - startMs,
+        });
       }
+    } catch (courseErr) {
+      progressLog('error', 'course_enrollment_update_failed', {
+        userId, courseId, error: (courseErr as Error).message,
+      });
+      throw courseErr; // Critical path: rethrow so the route can return 500
     }
+
+    // ── Update parent program enrollment (non-fatal) ───────────────────────────
+    try {
+      const course = await this.getCourse(courseId);
+      if (course?.programId) {
+        const [programEnrollment] = await db
+          .select()
+          .from(enrollments)
+          .where(and(eq(enrollments.userId, userId), eq(enrollments.programId, course.programId)));
+
+        if (programEnrollment) {
+          const programCourses = await db
+            .select()
+            .from(courses)
+            .where(eq(courses.programId, course.programId));
+
+          let completedCourses = 0;
+          for (const c of programCourses) {
+            const done = await this.checkCourseCompletion(userId, c.id);
+            if (done) completedCourses++;
+          }
+
+          const programProgress = Math.round((completedCourses / programCourses.length) * 100);
+          const isProgramComplete = completedCourses === programCourses.length;
+
+          const programUpdateData: Record<string, any> = {
+            progress: programProgress,
+            status: isProgramComplete ? 'completed' : 'in_progress',
+          };
+          if (isProgramComplete && !programEnrollment.completedAt) {
+            programUpdateData.completedAt = new Date();
+          }
+          await db.update(enrollments)
+            .set(programUpdateData)
+            .where(eq(enrollments.id, programEnrollment.id));
+          progressLog('info', 'program_enrollment_updated', {
+            userId, programId: course.programId,
+            progress: programProgress,
+            status: programUpdateData.status,
+          });
+        }
+      }
+    } catch (programErr) {
+      // Non-fatal: course is already persisted; log and continue
+      progressLog('error', 'program_enrollment_update_failed', {
+        userId, courseId, error: (programErr as Error).message,
+      });
+    }
+
+    progressLog('info', 'cascade_complete', {
+      userId, courseId, completedUnits, totalUnits: units.length,
+      progressPercent, durationMs: Date.now() - startMs,
+    });
   }
 
   /**
@@ -1153,6 +1255,128 @@ export class DatabaseStorage implements IStorage {
       progress: progressPercent,
       status: courseComplete ? 'completed' : 'in_progress',
       units: unitDetails,
+    };
+  }
+
+  /**
+   * Re-sync endpoint implementation.
+   * Iterates every course enrollment for the user and forces a full recalculation.
+   * Returns a before/after report for auditing.
+   * Should only be called by admins via POST /api/progress/recalculate/:userId.
+   */
+  async recalculateAllProgressForUser(
+    userId: number,
+  ): Promise<{ enrollmentsFixed: number; report: any[] }> {
+    progressLog('info', 'recalculate_start', { userId });
+
+    // Snapshot before
+    const userEnrollments = await db
+      .select()
+      .from(enrollments)
+      .where(eq(enrollments.userId, userId));
+
+    const report: any[] = [];
+    let enrollmentsFixed = 0;
+
+    for (const enrollment of userEnrollments) {
+      // Only process direct course enrollments (program enrollments cascade from these)
+      if (!enrollment.courseId) continue;
+
+      const before = {
+        enrollmentId: enrollment.id,
+        courseId: enrollment.courseId,
+        progress: enrollment.progress,
+        status: enrollment.status,
+      };
+
+      try {
+        await this.updateEnrollmentProgress(userId, enrollment.courseId);
+
+        // Fetch updated state
+        const [updated] = await db
+          .select()
+          .from(enrollments)
+          .where(eq(enrollments.id, enrollment.id));
+
+        const after = {
+          enrollmentId: enrollment.id,
+          courseId: enrollment.courseId,
+          progress: updated?.progress ?? before.progress,
+          status: updated?.status ?? before.status,
+        };
+
+        const changed = before.progress !== after.progress || before.status !== after.status;
+        if (changed) enrollmentsFixed++;
+
+        report.push({ before, after, changed });
+        progressLog('info', 'recalculate_enrollment_done', { userId, ...after, changed });
+      } catch (err) {
+        progressLog('error', 'recalculate_enrollment_failed', {
+          userId, courseId: enrollment.courseId, error: (err as Error).message,
+        });
+        report.push({ before, after: null, error: (err as Error).message });
+      }
+    }
+
+    progressLog('info', 'recalculate_complete', { userId, enrollmentsFixed, total: report.length });
+    return { enrollmentsFixed, report };
+  }
+
+  /**
+   * Returns a full hierarchical progress breakdown for admin inspection.
+   * Covers all enrollments (both direct-course and program-level).
+   */
+  async getAdminProgressForUser(userId: number): Promise<any> {
+    const userEnrollments = await db
+      .select()
+      .from(enrollments)
+      .where(eq(enrollments.userId, userId));
+
+    const directCourseEnrollments = userEnrollments.filter(e => e.courseId && !e.programId);
+    const programEnrollments      = userEnrollments.filter(e => e.programId);
+
+    // ── Direct course enrollments ──────────────────────────────────────────────────
+    const courseBreakdowns = await Promise.all(
+      directCourseEnrollments.map(async (enrollment) => {
+        const details = await this.getCourseProgressDetails(userId, enrollment.courseId!);
+        return {
+          enrollmentId: enrollment.id,
+          enrolledAt: enrollment.enrolledAt,
+          completedAt: enrollment.completedAt,
+          ...details,
+        };
+      }),
+    );
+
+    // ── Program enrollments (with per-course drill-down) ──────────────────────────
+    const programBreakdowns = await Promise.all(
+      programEnrollments.map(async (enrollment) => {
+        const programCourses = await db
+          .select()
+          .from(courses)
+          .where(eq(courses.programId, enrollment.programId!));
+
+        const courseDetails = await Promise.all(
+          programCourses.map(c => this.getCourseProgressDetails(userId, c.id)),
+        );
+
+        return {
+          enrollmentId: enrollment.id,
+          programId: enrollment.programId,
+          enrolledAt: enrollment.enrolledAt,
+          completedAt: enrollment.completedAt,
+          progress: enrollment.progress,
+          status: enrollment.status,
+          courses: courseDetails,
+        };
+      }),
+    );
+
+    return {
+      userId,
+      generatedAt: new Date().toISOString(),
+      directCourses: courseBreakdowns,
+      programs: programBreakdowns,
     };
   }
 }

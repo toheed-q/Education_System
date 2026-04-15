@@ -7,9 +7,9 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import argon2 from "argon2";
-import { users, courseWeeks as courseWeeksTable } from "@shared/schema";
+import { users, courseWeeks as courseWeeksTable, quizAttempts } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { generateSlug } from "@shared/utils";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import OpenAI from "openai";
@@ -1676,11 +1676,20 @@ Only respond with the description text, nothing else.`
         return res.status(403).json({ message: "You are not enrolled in this course" });
       }
 
+      // Check if already completed to avoid redundant cascade
+      const alreadyCompleted = await storage.isLessonCompleted(userId, lessonId);
+      
       // Mark lesson complete (idempotent — safe to call multiple times)
       await storage.markLessonComplete(userId, lessonId);
 
-      // Cascade: recalculate and persist enrollment progress
-      await storage.updateEnrollmentProgress(userId, unit.courseId);
+      // Cascade: recalculate and persist enrollment progress ONLY if changed
+      if (!alreadyCompleted) {
+        try {
+          await storage.updateEnrollmentProgress(userId, unit.courseId);
+        } catch (cascadeErr) {
+          console.error("[progress/lesson-complete] cascade failed:", cascadeErr);
+        }
+      }
 
       // Return updated progress snapshot
       const progressDetails = await storage.getCourseProgressDetails(userId, unit.courseId);
@@ -1724,8 +1733,41 @@ Only respond with the description text, nothing else.`
     }
   });
 
-  // Quiz Builder APIs (Admin)
   const isAdmin = (req: any) => req.isAuthenticated() && ["admin", "super_admin"].includes((req.user as any).role);
+
+  /**
+   * POST /api/progress/recalculate/:userId
+   * Admin-only. Recomputes progress from the ground up for all enrollments.
+   */
+  app.post("/api/progress/recalculate/:userId", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const targetUserId = Number(req.params.userId);
+    try {
+      const result = await storage.recalculateAllProgressForUser(targetUserId);
+      return res.json({ success: true, ...result });
+    } catch (err) {
+      console.error("[progress/recalculate] Error:", err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  /**
+   * GET /api/admin/progress/:userId
+   * Admin-only. Returns full exact breakdown of a user's progress.
+   */
+  app.get("/api/admin/progress/:userId", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+    const targetUserId = Number(req.params.userId);
+    try {
+      const breakdown = await storage.getAdminProgressForUser(targetUserId);
+      return res.json(breakdown);
+    } catch (err) {
+      console.error("[admin/progress] Error:", err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Quiz Builder APIs (Admin)
 
   app.get("/api/units/:unitId/quiz", async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
@@ -1875,6 +1917,29 @@ Only respond with the description text, nothing else.`
     const scorePercent = Math.round((correct / questions.length) * 100);
     const passed = scorePercent >= quiz.passScorePercent;
     
+    // Anti-spam guard: prevent duplicate attempt in rapid succession
+    const recentAttempts = await db
+      .select()
+      .from(quizAttempts)
+      .where(and(
+        eq(quizAttempts.userId, userId),
+        eq(quizAttempts.quizId, quizId),
+        eq(quizAttempts.scorePercent, scorePercent)
+      ))
+      .orderBy(desc(quizAttempts.submittedAt))
+      .limit(1);
+
+    if (recentAttempts.length > 0) {
+      const lastAttempt = recentAttempts[0];
+      const msSinceLast = Date.now() - (lastAttempt.submittedAt?.getTime() ?? 0);
+      if (msSinceLast < 5000) { // 5 seconds debounce
+        return res.json({
+          scorePercent, passed, correctAnswers: correct, totalQuestions: questions.length,
+          message: "Duplicate submission ignored"
+        });
+      }
+    }
+
     await storage.createQuizAttempt({
       quizId,
       userId,

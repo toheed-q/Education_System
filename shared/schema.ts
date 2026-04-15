@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -126,7 +126,11 @@ export const completedContent = pgTable("completed_content", {
   userId: integer("user_id").notNull().references(() => users.id),
   contentId: integer("content_id").notNull().references(() => courseContent.id),
   completedAt: timestamp("completed_at").defaultNow(),
-});
+}, (table) => ({
+  // DB-level unique constraint: prevents duplicate rows even under concurrent requests
+  userContentUnique: uniqueIndex("cc_user_content_unique").on(table.userId, table.contentId),
+}));
+
 
 export const certificates = pgTable("certificates", {
   id: serial("id").primaryKey(),
