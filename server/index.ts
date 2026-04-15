@@ -12,6 +12,11 @@ declare module "http" {
   }
 }
 
+app.use((_req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
+
 app.use(
   express.json({
     verify: (req, _res, buf) => {

@@ -50,6 +50,9 @@ export interface IStorage {
   updateUserVerification(id: number, isVerified: boolean): Promise<User>;
   setVerificationOtp(userId: number, otp: string, expiresAt: Date): Promise<void>;
   verifyUserOtp(email: string, otp: string): Promise<User | undefined>;
+  listUsers(): Promise<User[]>;
+  countUsers(): Promise<number>;
+
 
   // Programs & Courses
   getPrograms(): Promise<Program[]>;
@@ -138,7 +141,9 @@ export interface IStorage {
 
   // Seeding helpers
   countUsers(): Promise<number>;
+  listUsers(): Promise<User[]>;
   countPrograms(): Promise<number>;
+
   createProgram(program: { title: string; description: string; slug: string; price: number; published: boolean }): Promise<Program>;
   createCourse(course: { title: string; description: string; slug: string; price: number; programId?: number; published: boolean }): Promise<Course>;
   
@@ -203,6 +208,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return updated;
+  }
+
+  async listUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async countUsers(): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(users);
+    return Number(result.count);
   }
 
   async getPrograms(): Promise<Program[]> {

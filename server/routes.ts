@@ -13,7 +13,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { generateSlug } from "@shared/utils";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import OpenAI from "openai";
-import { verifyFirebaseToken } from "./firebaseAdmin";
+import { verifyFirebaseToken, auth as firebaseAuth } from "./firebaseAdmin";
 import crypto from "crypto";
 import { sendOtpEmail } from "./mail";
 
@@ -766,6 +766,10 @@ Only respond with the description text, nothing else.`
         amountKes: amount,
         paystackReference: reference,
       });
+
+      if (amount <= 0) {
+        return res.status(400).json({ message: "Course price must be greater than zero for paid enrollment" });
+      }
       
       // Initialize Paystack transaction
       const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -793,6 +797,12 @@ Only respond with the description text, nothing else.`
       const paystackData = await paystackResponse.json();
       
       if (!paystackData.status) {
+        console.error("Paystack initialization failed:", {
+          status: paystackResponse.status,
+          data: paystackData,
+          reference,
+          userId: user.id,
+        });
         return res.status(400).json({ message: paystackData.message || "Payment initialization failed" });
       }
       
@@ -1734,6 +1744,83 @@ Only respond with the description text, nothing else.`
   });
 
   const isAdmin = (req: any) => req.isAuthenticated() && ["admin", "super_admin"].includes((req.user as any).role);
+  
+  app.get("/api/admin/users", async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Unauthorized" });
+
+    try {
+      // 1. Fetch users from Local Database (PostgreSQL)
+      const localUsers = await storage.listUsers();
+      
+      // 2. Fetch users from Firebase if available
+      let firebaseUsersMap = new Map();
+      if (firebaseAuth) {
+        try {
+          const fbResult = await firebaseAuth.listUsers();
+          fbResult.users.forEach(fbUser => {
+            if (fbUser.email) {
+              firebaseUsersMap.set(fbUser.email, fbUser);
+            }
+          });
+        } catch (fbErr) {
+          console.error("[ADMIN] Failed to fetch Firebase users:", fbErr);
+          // Continue with local users only
+        }
+      }
+
+      // 3. Merge users based on email
+      const processedEmails = new Set();
+      const unifiedUsers = localUsers.map(u => {
+        processedEmails.add(u.email);
+        const fbUser = firebaseUsersMap.get(u.email);
+        return {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          createdAt: u.createdAt,
+          isVerified: u.isVerified,
+          provider: u.password === "FIREBASE_AUTH" ? "firebase" : "local",
+          firebaseMetadata: fbUser ? {
+            uid: fbUser.uid,
+            lastSignInTime: fbUser.metadata.lastSignInTime,
+            emailVerified: fbUser.emailVerified,
+            disabled: fbUser.disabled
+          } : null,
+          isLinked: !!fbUser
+        };
+      });
+
+      // 4. Add users that exist only in Firebase
+      if (firebaseAuth) {
+        firebaseUsersMap.forEach((fbUser, email) => {
+          if (!processedEmails.has(email)) {
+            unifiedUsers.push({
+              id: -1, // No local ID yet
+              email: email,
+              name: fbUser.displayName || email.split("@")[0],
+              role: "student", // Default role
+              createdAt: new Date(fbUser.metadata.creationTime),
+              isVerified: fbUser.emailVerified,
+              provider: "firebase",
+              firebaseMetadata: {
+                uid: fbUser.uid,
+                lastSignInTime: fbUser.metadata.lastSignInTime,
+                emailVerified: fbUser.emailVerified,
+                disabled: fbUser.disabled
+              },
+              isLinked: false // Exists in Firebase but not in Local DB sync yet
+            });
+          }
+        });
+      }
+
+      res.json(unifiedUsers);
+    } catch (err) {
+      console.error("[ADMIN] Error listing users:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   /**
    * POST /api/progress/recalculate/:userId
