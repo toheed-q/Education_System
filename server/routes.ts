@@ -18,6 +18,61 @@ import crypto from "crypto";
 import { sendOtpEmail } from "./mail";
 import { generateCertificatePDF } from "./certificates";
 import { type User } from "@shared/schema";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// ── Certificate template storage ──
+const TEMPLATE_DIR = path.join(process.cwd(), 'certificate_templates');
+const TEMPLATE_META_FILE = path.join(TEMPLATE_DIR, 'meta.json');
+if (!fs.existsSync(TEMPLATE_DIR)) fs.mkdirSync(TEMPLATE_DIR, { recursive: true });
+
+const templateUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, TEMPLATE_DIR),
+    filename: (_req, _file, cb) => cb(null, 'template.png'),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (['image/png', 'image/jpeg', 'image/jpg'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only PNG/JPG images are allowed'));
+  },
+});
+
+// ── Resource file upload storage ──
+const RESOURCE_UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'resources');
+if (!fs.existsSync(RESOURCE_UPLOAD_DIR)) fs.mkdirSync(RESOURCE_UPLOAD_DIR, { recursive: true });
+
+const resourceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, RESOURCE_UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ext = path.extname(file.originalname);
+      cb(null, `${unique}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/png', 'image/jpeg', 'image/jpg',
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('File type not allowed'));
+  },
+});
+
+export function getCertificateTemplatePath(): string | null {
+  const imgPath = path.join(TEMPLATE_DIR, 'template.png');
+  return fs.existsSync(imgPath) ? imgPath : null;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -2109,9 +2164,97 @@ Only respond with the description text, nothing else.`
 
     res.json({
       valid: true,
+      id: cert.id,
+      code: cert.code,
       userName: user?.name,
       courseTitle: course?.title || program?.title,
       issuedAt: cert.issuedAt,
+    });
+  });
+
+  // ── Certificate Template Management (Admin) ──
+  app.use('/certificate_templates', (req, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+    next();
+  });
+
+  // Serve the template image file
+  app.get('/certificate_templates/template.png', (_req, res) => {
+    const imgPath = path.join(TEMPLATE_DIR, 'template.png');
+    if (!fs.existsSync(imgPath)) return res.status(404).send('Not found');
+    res.sendFile(imgPath);
+  });
+
+  // GET current template metadata
+  app.get('/api/admin/certificate-template', (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+
+    const imgPath = path.join(TEMPLATE_DIR, 'template.png');
+    const hasTemplate = fs.existsSync(imgPath);
+    let uploadedAt: string | null = null;
+    if (hasTemplate && fs.existsSync(TEMPLATE_META_FILE)) {
+      try { uploadedAt = JSON.parse(fs.readFileSync(TEMPLATE_META_FILE, 'utf8')).uploadedAt; } catch {}
+    }
+    res.json({
+      hasTemplate,
+      templateUrl: hasTemplate ? '/certificate_templates/template.png' : null,
+      uploadedAt,
+    });
+  });
+
+  // POST upload new template
+  app.post('/api/admin/certificate-template', (req, res, next) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+
+    templateUpload.single('template')(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message });
+      if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+      fs.writeFileSync(TEMPLATE_META_FILE, JSON.stringify({ uploadedAt: new Date().toISOString() }));
+      res.json({ success: true, templateUrl: '/certificate_templates/template.png' });
+    });
+  });
+
+  // DELETE remove template
+  app.delete('/api/admin/certificate-template', (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+
+    const imgPath = path.join(TEMPLATE_DIR, 'template.png');
+    if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+    if (fs.existsSync(TEMPLATE_META_FILE)) fs.unlinkSync(TEMPLATE_META_FILE);
+    res.json({ success: true });
+  });
+
+  // ── Lesson Resource File Upload ──
+  app.use('/uploads/resources', (req, res, next) => {
+    // Serve uploaded resource files — auth required
+    if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
+    next();
+  });
+
+  // Serve uploaded resource files statically
+  app.use('/uploads/resources', (req, res, next) => {
+    const filePath = path.join(RESOURCE_UPLOAD_DIR, path.basename(req.path));
+    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+    res.sendFile(filePath);
+  });
+
+  // POST upload a lesson resource file
+  app.post('/api/lessons/upload-resource', (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+
+    resourceUpload.single('file')(req, res, (err) => {
+      if (err) return res.status(400).json({ message: err.message });
+      if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+      const url = `/uploads/resources/${req.file.filename}`;
+      res.json({ url, name: req.file.originalname });
     });
   });
 

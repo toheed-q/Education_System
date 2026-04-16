@@ -2,7 +2,7 @@ import { Navigation } from "@/components/Navigation";
 import { useCourseBySlug, useCourseProgress, useCertificate, useDetailedCourseProgress, useMarkLessonComplete } from "@/hooks/use-content";
 import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Clock, BookOpen, CheckCircle, Lock, PlayCircle, FileText, Video, LinkIcon, ChevronDown, ChevronUp, Award, ExternalLink } from "lucide-react";
+import { Clock, BookOpen, CheckCircle, Lock, PlayCircle, FileText, Video, LinkIcon, ChevronDown, ChevronUp, Award, ExternalLink, Download } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,8 @@ interface ContentItem {
   type: "video" | "reading" | "file" | "link";
   contentUrl?: string;
   contentText?: string;
+  videoUrl?: string;
+  resources?: { name: string; url: string }[] | null;
   sequenceOrder: number;
 }
 
@@ -67,6 +69,35 @@ function linkify(text: string) {
   });
 }
 
+function ResourcesSection({ resources }: { resources?: { name: string; url: string }[] | null }) {
+  if (!resources || resources.length === 0) return null;
+  return (
+    <div className="mt-6 pt-6 border-t border-slate-100">
+      <h5 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <Download className="w-4 h-4" /> Lesson Resources
+      </h5>
+      <div className="space-y-2">
+        {resources.map((r, i) => (
+          <a
+            key={i}
+            href={r.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group"
+          >
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 shrink-0">
+              <FileText className="w-4 h-4" />
+            </div>
+            <span className="flex-1 text-sm font-medium text-slate-700 group-hover:text-blue-700 truncate">{r.name}</span>
+            <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-500 shrink-0" />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ContentPlayer({ 
   content, 
   onComplete, 
@@ -112,6 +143,7 @@ function ContentPlayer({
         <div className="prose prose-slate max-w-none text-slate-600 whitespace-pre-wrap leading-relaxed break-words text-lg">
           {linkify(content.contentText || "")}
         </div>
+        <ResourcesSection resources={content.resources} />
         {renderMarkComplete()}
       </div>
     );
@@ -138,6 +170,7 @@ function ContentPlayer({
             <Video className="w-5 h-5" /> Open Lesson Video
           </a>
         )}
+        <ResourcesSection resources={content.resources} />
         {renderMarkComplete()}
       </div>
     );
@@ -169,6 +202,7 @@ function ContentPlayer({
             </a>
           </div>
         </div>
+        <ResourcesSection resources={content.resources} />
         {renderMarkComplete()}
       </div>
     );
@@ -200,6 +234,7 @@ function ContentPlayer({
             </a>
           </div>
         </div>
+        <ResourcesSection resources={content.resources} />
         {renderMarkComplete()}
       </div>
     );

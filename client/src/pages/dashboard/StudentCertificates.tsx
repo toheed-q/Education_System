@@ -12,7 +12,7 @@ export default function StudentCertificates() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: certificates, isLoading: certsLoading } = useQuery<(Certificate & { course?: Course, program?: Program })[]>({
+  const { data: certificates, isLoading: certsLoading, error: certsError } = useQuery<(Certificate & { course?: Course, program?: Program })[]>({
     queryKey: [api.certificates.list.path],
     queryFn: async () => {
       const res = await fetch(api.certificates.list.path);
@@ -37,6 +37,17 @@ export default function StudentCertificates() {
   if (!user) {
     setLocation("/login");
     return null;
+  }
+
+  if (certsError) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-slate-500 mb-4">Failed to load certificates. Please try again.</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (

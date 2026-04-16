@@ -33,6 +33,7 @@ import AdminAnalytics from "@/pages/admin/AdminAnalytics";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminLogs from "@/pages/admin/AdminLogs";
 import AdminCourseBuilder from "@/pages/admin/AdminCourseBuilder";
+import AdminCertificateDesign from "@/pages/admin/AdminCertificateDesign";
 import EnrollmentCallback from "@/pages/EnrollmentCallback";
 import PaymentCallback from "@/pages/PaymentCallback";
 import VerifyCertificate from "@/pages/VerifyCertificate";
@@ -84,6 +85,7 @@ function Router() {
       <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/admin/settings" component={AdminSettings} />
       <Route path="/admin/logs" component={AdminLogs} />
+      <Route path="/admin/certificate-design" component={AdminCertificateDesign} />
       
       <Route component={NotFound} />
     </Switch>

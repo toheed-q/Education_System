@@ -1,109 +1,125 @@
-import PDFDocument from 'pdfkit';
-import { type Certificate, type User, type Course, type Program } from '@shared/schema';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { format } from 'date-fns';
-import path from 'path';
 import fs from 'fs';
+import { getCertificateTemplatePath } from './routes';
 
 interface CertificateData {
-  certificate: Certificate;
-  user: User;
-  course?: Course;
-  program?: Program;
+  userName: string;
+  courseTitle: string;
+  issueDate: Date;
+  certificateCode: string;
+}
+
+// Helper: convert hex color string to pdf-lib rgb (0–1 range)
+function hex(h: string) {
+  const n = parseInt(h.replace('#', ''), 16);
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }
 
 export async function generateCertificatePDF(data: CertificateData): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({
-      layout: 'landscape',
-      size: 'A4',
-      margin: 0,
-    });
+  // A4 landscape: 841.89 x 595.28 pt
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([841.89, 595.28]);
+  const { width, height } = page.getSize();
 
-    const buffers: Buffer[] = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
-    doc.on('error', reject);
+  const fontBold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+  const fontMono    = await pdfDoc.embedFont(StandardFonts.Courier);
 
-    // Background Colors
-    doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8fafc');
-    
-    // Decorative Border
-    doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40)
-       .lineWidth(2)
-       .stroke('#e2e8f0');
-    
-    doc.rect(30, 30, doc.page.width - 60, doc.page.height - 60)
-       .lineWidth(1)
-       .stroke('#cbd5e1');
+  // Helper: draw centered text at a given Y from top
+  const centerText = (text: string, yFromTop: number, font: typeof fontBold, size: number, color: string) => {
+    const textWidth = font.widthOfTextAtSize(text, size);
+    page.drawText(text, { x: (width - textWidth) / 2, y: height - yFromTop, size, font, color: hex(color) });
+  };
 
-    // Header / Logo area
-    doc.fillColor('#1e293b')
-       .fontSize(30)
-       .font('Helvetica-Bold')
-       .text('LernenTech Portal', 0, 80, { align: 'center' });
-    
-    doc.fillColor('#64748b')
-       .fontSize(14)
-       .font('Helvetica')
-       .text('EXCELLENCE IN DIGITAL EDUCATION', 0, 115, { align: 'center' });
+  // ── Background: custom template or built-in design ──
+  const templatePath = getCertificateTemplatePath();
+  if (templatePath) {
+    // Embed the uploaded template image as the full-page background
+    const imgBytes = fs.readFileSync(templatePath);
+    const ext = templatePath.toLowerCase();
+    const embeddedImg = ext.endsWith('.png')
+      ? await pdfDoc.embedPng(imgBytes)
+      : await pdfDoc.embedJpg(imgBytes);
+    page.drawImage(embeddedImg, { x: 0, y: 0, width, height });
+  } else {
+    // Built-in default design
+    page.drawRectangle({ x: 0, y: 0, width, height, color: hex('#f8fafc') });
+    page.drawRectangle({ x: 20, y: 20, width: width - 40, height: height - 40,
+      borderColor: hex('#e2e8f0'), borderWidth: 2 });
+    page.drawRectangle({ x: 30, y: 30, width: width - 60, height: height - 60,
+      borderColor: hex('#cbd5e1'), borderWidth: 1 });
 
-    // Certificate Title
-    doc.fillColor('#0f172a')
-       .fontSize(48)
-       .font('Times-BoldItalic')
-       .text('Certificate of Completion', 0, 180, { align: 'center' });
+    centerText('LernenTech Portal',          80,  fontBold,    28, '#1e293b');
+    centerText('EXCELLENCE IN DIGITAL EDUCATION', 112, fontRegular, 12, '#64748b');
+    page.drawLine({ start: { x: width * 0.3, y: height - 125 }, end: { x: width * 0.7, y: height - 125 },
+      thickness: 1, color: hex('#e2e8f0') });
+  }
 
-    doc.fillColor('#475569')
-       .fontSize(16)
-       .font('Helvetica')
-       .text('This is to certify that', 0, 250, { align: 'center' });
+  // ── Text overlay (always rendered on top of background) ──
+  if (!templatePath) {
+    // Only render the title block for the default design
+    centerText('Certificate of Completion', 175, fontOblique, 38, '#0f172a');
+    centerText('This is to certify that',   230, fontRegular, 14, '#475569');
+  } else {
+    // For custom templates, start text lower to avoid covering the template header
+    centerText('Certificate of Completion', 155, fontOblique, 34, '#0f172a');
+    centerText('This is to certify that',   210, fontRegular, 14, '#475569');
+  }
 
-    // User Name
-    doc.fillColor('#2563eb')
-       .fontSize(36)
-       .font('Helvetica-Bold')
-       .text(data.user.name, 0, 280, { align: 'center' });
+  const nameY    = templatePath ? 248 : 268;
+  const bodyY    = templatePath ? 290 : 310;
+  const titleY   = templatePath ? 325 : 345;
+  const dateY    = templatePath ? 375 : 390;
+  const sigY     = height - (templatePath ? 480 : 460);
 
-    doc.fillColor('#475569')
-       .fontSize(16)
-       .font('Helvetica')
-       .text('has successfully completed the course', 0, 330, { align: 'center' });
+  centerText(data.userName, nameY, fontBold, 32, '#2563eb');
+  centerText('has successfully completed the course', bodyY, fontRegular, 14, '#475569');
 
-    // Course Name
-    const courseTitle = data.course?.title || data.program?.title || 'Unknown Course';
-    doc.fillColor('#0f172a')
-       .fontSize(28)
-       .font('Helvetica-Bold')
-       .text(`"${courseTitle}"`, 0, 360, { align: 'center' });
-
-    // Completion Date
-    const completionDate = data.certificate.issuedAt 
-      ? format(new Date(data.certificate.issuedAt), 'MMMM do, yyyy')
-      : format(new Date(), 'MMMM do, yyyy');
-
-    doc.fillColor('#64748b')
-       .fontSize(14)
-       .font('Helvetica')
-       .text(`Issued on ${completionDate}`, 0, 410, { align: 'center' });
-
-    // Signature Area
-    const sigY = 480;
-    doc.moveTo(200, sigY).lineTo(400, sigY).stroke('#94a3b8');
-    doc.moveTo(442, sigY).lineTo(642, sigY).stroke('#94a3b8');
-
-    doc.fillColor('#475569')
-       .fontSize(12)
-       .text('Program Director', 200, sigY + 10, { width: 200, align: 'center' });
-    doc.text('Lead Instructor', 442, sigY + 10, { width: 200, align: 'center' });
-
-    // Verification Code
-    doc.fillColor('#94a3b8')
-       .fontSize(10)
-       .font('Courier')
-       .text(`Verification ID: ${data.certificate.code}`, 50, doc.page.height - 60);
-
-    doc.text(`Verify at: learning-tech-portal.com/verify/${data.certificate.code}`, 50, doc.page.height - 45);
-
-    doc.end();
+  const courseText = `"${data.courseTitle}"`;
+  const courseSize = 24;
+  const courseWidth = fontBold.widthOfTextAtSize(courseText, courseSize);
+  page.drawText(courseText, {
+    x: (width - Math.min(courseWidth, width - 100)) / 2,
+    y: height - titleY,
+    size: courseSize,
+    font: fontBold,
+    color: hex('#0f172a'),
+    maxWidth: width - 100,
   });
+
+  const completionDate = format(new Date(data.issueDate), 'MMMM do, yyyy');
+  centerText(`Issued on ${completionDate}`, dateY, fontRegular, 13, '#64748b');
+
+  // Signature lines
+  const sig1X = width * 0.22;
+  const sig2X = width * 0.55;
+  const sigW  = 160;
+  page.drawLine({ start: { x: sig1X, y: sigY }, end: { x: sig1X + sigW, y: sigY },
+    thickness: 1, color: hex('#94a3b8') });
+  page.drawLine({ start: { x: sig2X, y: sigY }, end: { x: sig2X + sigW, y: sigY },
+    thickness: 1, color: hex('#94a3b8') });
+
+  const label1 = 'Program Director';
+  const label2 = 'Lead Instructor';
+  page.drawText(label1, {
+    x: sig1X + (sigW - fontRegular.widthOfTextAtSize(label1, 11)) / 2,
+    y: sigY - 16, size: 11, font: fontRegular, color: hex('#475569'),
+  });
+  page.drawText(label2, {
+    x: sig2X + (sigW - fontRegular.widthOfTextAtSize(label2, 11)) / 2,
+    y: sigY - 16, size: 11, font: fontRegular, color: hex('#475569'),
+  });
+
+  // Verification footer
+  page.drawText(`Verification ID: ${data.certificateCode}`, {
+    x: 50, y: 42, size: 9, font: fontMono, color: hex('#94a3b8'),
+  });
+  page.drawText(`Verify at: lernentech.com/verify/${data.certificateCode}`, {
+    x: 50, y: 28, size: 9, font: fontMono, color: hex('#94a3b8'),
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
 }

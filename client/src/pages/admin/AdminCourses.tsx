@@ -194,7 +194,7 @@ export default function AdminCourses({ autoOpen = false, ...props }: { autoOpen?
                               <SelectValue placeholder="Select a program" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent position="item-aligned">
                             <SelectItem value="none">No Program (Standalone Course)</SelectItem>
                             {(programs as any[])?.map((program: any) => (
                               <SelectItem key={program.id} value={program.id.toString()}>

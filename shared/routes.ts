@@ -381,6 +381,8 @@ export const api = {
       responses: {
         200: z.object({
           valid: z.boolean(),
+          id: z.number().optional(),
+          code: z.string().optional(),
           userName: z.string().optional(),
           courseTitle: z.string().optional(),
           issuedAt: z.any().optional(),

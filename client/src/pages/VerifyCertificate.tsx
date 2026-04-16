@@ -124,15 +124,6 @@ export default function VerifyCertificate() {
                     </p>
                   </div>
                 </div>
-                
-                <div className="mt-8 flex gap-4">
-                  <Button 
-                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white rounded-full h-12"
-                    onClick={() => window.open(`/api/certificates/download/${certificate.id}`, '_blank')}
-                  >
-                    View Official PDF
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           )}

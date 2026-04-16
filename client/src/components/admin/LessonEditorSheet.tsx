@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Select,
@@ -25,6 +24,7 @@ import {
   Plus,
   X,
   Clock,
+  Upload,
 } from "lucide-react";
 
 interface Resource {
@@ -68,6 +68,7 @@ const TYPE_COLORS = {
 export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEditorSheetProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     title: lesson.title,
@@ -80,7 +81,8 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
   const [resources, setResources] = useState<Resource[]>(
     Array.isArray(lesson.resources) ? lesson.resources : []
   );
-  const [newResource, setNewResource] = useState({ name: "", url: "" });
+  const [newResourceName, setNewResourceName] = useState("");
+  const [uploadingResource, setUploadingResource] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -98,10 +100,34 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const addResource = () => {
-    if (!newResource.name.trim() || !newResource.url.trim()) return;
-    setResources((r) => [...r, { name: newResource.name.trim(), url: newResource.url.trim() }]);
-    setNewResource({ name: "", url: "" });
+  // Upload a file and add it as a resource
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const name = newResourceName.trim() || file.name;
+    setUploadingResource(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/lessons/upload-resource", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Upload failed");
+      }
+      const data = await res.json();
+      setResources((r) => [...r, { name, url: data.url }]);
+      setNewResourceName("");
+      toast({ title: "File uploaded", description: `${name} added as a resource.` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingResource(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const removeResource = (i: number) =>
@@ -139,8 +165,8 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0">
-        <SheetHeader className="px-6 py-4 border-b bg-white sticky top-0 z-10">
+      <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0">
+        <SheetHeader className="px-6 py-4 border-b bg-white shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${TYPE_COLORS[form.type]}`}>
               <TypeIcon className="w-4 h-4" />
@@ -152,17 +178,9 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
           </div>
         </SheetHeader>
 
-        <div className="p-6 space-y-5">
-          {/* Title */}
-          <Field label="Lesson Title" required>
-            <Input
-              placeholder="e.g. Introduction to Variables"
-              value={form.title}
-              onChange={set("title")}
-            />
-          </Field>
-
-          {/* Type */}
+        {/* Content Type select sits OUTSIDE the overflow-y-auto scroll container
+            so its portal is never clipped by an overflow stacking context */}
+        <div className="px-6 pt-5 shrink-0">
           <Field label="Content Type">
             <Select
               value={form.type}
@@ -173,30 +191,34 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="video">
-                  <span className="flex items-center gap-2">
-                    <Video className="w-4 h-4 text-red-500" /> Video
-                  </span>
+                  <span className="flex items-center gap-2"><Video className="w-4 h-4 text-red-500" /> Video</span>
                 </SelectItem>
                 <SelectItem value="reading">
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" /> Reading
-                  </span>
+                  <span className="flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" /> Reading</span>
                 </SelectItem>
                 <SelectItem value="file">
-                  <span className="flex items-center gap-2">
-                    <File className="w-4 h-4 text-orange-500" /> File
-                  </span>
+                  <span className="flex items-center gap-2"><File className="w-4 h-4 text-orange-500" /> File</span>
                 </SelectItem>
                 <SelectItem value="link">
-                  <span className="flex items-center gap-2">
-                    <LinkIcon className="w-4 h-4 text-green-500" /> Link
-                  </span>
+                  <span className="flex items-center gap-2"><LinkIcon className="w-4 h-4 text-green-500" /> Link</span>
                 </SelectItem>
               </SelectContent>
             </Select>
           </Field>
+        </div>
 
-          {/* Video URL — shown for video type */}
+        {/* Everything else scrolls inside this container */}
+        <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5 space-y-5">
+          {/* Title */}
+          <Field label="Lesson Title" required>
+            <Input
+              placeholder="e.g. Introduction to Variables"
+              value={form.title}
+              onChange={set("title")}
+            />
+          </Field>
+
+          {/* Video URL */}
           {form.type === "video" && (
             <Field label="Video URL">
               <Input
@@ -207,7 +229,7 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
             </Field>
           )}
 
-          {/* Content URL — shown for file/link types */}
+          {/* Content URL for file/link */}
           {(form.type === "file" || form.type === "link") && (
             <Field label={form.type === "file" ? "File URL" : "Link URL"}>
               <Input
@@ -222,7 +244,7 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
             </Field>
           )}
 
-          {/* Lesson Content Text — shown for reading and video (notes) */}
+          {/* Content text for reading/video */}
           {(form.type === "reading" || form.type === "video") && (
             <Field
               label={form.type === "reading" ? "Lesson Content" : "Lesson Notes"}
@@ -255,9 +277,10 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
             </div>
           </Field>
 
-          {/* Resources */}
+          {/* Resources — real file upload */}
           <Field label="Resources (PDFs / Files)">
             <div className="space-y-2">
+              {/* Existing resources */}
               {resources.map((r, i) => (
                 <div
                   key={i}
@@ -266,7 +289,14 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
                   <File className="w-4 h-4 text-slate-400 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{r.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{r.url}</p>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:underline truncate block"
+                    >
+                      {r.url}
+                    </a>
                   </div>
                   <Button
                     size="icon"
@@ -279,37 +309,38 @@ export function LessonEditorSheet({ lesson, courseId, open, onClose }: LessonEdi
                 </div>
               ))}
 
-              {/* Add resource row */}
+              {/* Upload new resource */}
               <div className="flex gap-2">
                 <Input
-                  placeholder="Resource name"
+                  placeholder="Resource name (optional)"
                   className="text-sm"
-                  value={newResource.name}
-                  onChange={(e) => setNewResource((r) => ({ ...r, name: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && addResource()}
+                  value={newResourceName}
+                  onChange={(e) => setNewResourceName(e.target.value)}
                 />
-                <Input
-                  placeholder="URL"
-                  className="text-sm flex-[2]"
-                  value={newResource.url}
-                  onChange={(e) => setNewResource((r) => ({ ...r, url: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && addResource()}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg"
+                  onChange={handleFileUpload}
                 />
                 <Button
-                  size="icon"
                   variant="outline"
-                  className="shrink-0"
-                  onClick={addResource}
-                  disabled={!newResource.name.trim() || !newResource.url.trim()}
+                  className="shrink-0 gap-2"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingResource}
                 >
-                  <Plus className="w-4 h-4" />
+                  {uploadingResource ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {uploadingResource ? "Uploading..." : "Upload File"}
                 </Button>
               </div>
-              {resources.length === 0 && (
-                <p className="text-xs text-slate-400">
-                  Add downloadable resources for students (PDFs, slides, etc.)
-                </p>
-              )}
+              <p className="text-xs text-slate-400">
+                Upload PDFs, slides, or other files for students to download. Max 20MB.
+              </p>
             </div>
           </Field>
 

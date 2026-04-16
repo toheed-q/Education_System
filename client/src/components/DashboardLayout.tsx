@@ -167,6 +167,7 @@ const adminMenuItems: MenuItem[] = [
     ]
   },
   { title: "Verifications", url: "/admin/verifications", icon: CheckCircle, testId: "nav-verifications" },
+  { title: "Certificate Design", url: "/admin/certificate-design", icon: Award, testId: "nav-certificate-design" },
   { title: "Analytics", url: "/admin/analytics", icon: BarChart3, testId: "nav-analytics" },
 ];
 
