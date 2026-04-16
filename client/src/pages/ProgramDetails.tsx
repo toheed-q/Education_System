@@ -26,9 +26,16 @@ export default function ProgramDetails() {
       const response = await apiRequest("POST", "/api/enrollments/initiate-payment", { programId: program?.id });
       return response.json();
     },
-    onSuccess: (data: { authorizationUrl: string; reference: string }) => {
+    onSuccess: (data: { authorizationUrl?: string; reference?: string; isFree?: boolean }) => {
+      if (data.isFree) {
+        toast({ title: "Successfully enrolled!" });
+        queryClient.invalidateQueries({ queryKey: ["/api/programs/slug", slug] });
+        return;
+      }
       sessionStorage.setItem("enrollment_return_slug", `/programs/${slug}`);
-      window.location.href = data.authorizationUrl;
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      }
     },
     onError: (err: any) => {
       if (err.message === "Already enrolled") {

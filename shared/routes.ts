@@ -17,7 +17,8 @@ import {
   quizzes,
   quizQuestions,
   quizAttempts,
-  enrollments
+  enrollments,
+  certificates
 } from './schema';
 
 export const errorSchemas = {
@@ -346,6 +347,45 @@ export const api = {
       responses: {
         200: z.object({ success: z.boolean() }),
         400: errorSchemas.validation,
+      },
+    },
+  },
+  certificates: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/certificates',
+      responses: {
+        200: z.array(z.custom<typeof certificates.$inferSelect & { course?: typeof courses.$inferSelect, program?: typeof programs.$inferSelect }>()),
+        401: errorSchemas.unauthorized,
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/certificates/:courseId',
+      responses: {
+        200: z.custom<typeof certificates.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    download: {
+      method: 'GET' as const,
+      path: '/api/certificates/download/:certificateId',
+      responses: {
+        200: z.any(),
+        404: errorSchemas.notFound,
+      },
+    },
+    verify: {
+      method: 'GET' as const,
+      path: '/api/certificates/verify/:code',
+      responses: {
+        200: z.object({
+          valid: z.boolean(),
+          userName: z.string().optional(),
+          courseTitle: z.string().optional(),
+          issuedAt: z.any().optional(),
+        }),
+        404: z.object({ valid: z.boolean(), message: z.string() }),
       },
     },
   },

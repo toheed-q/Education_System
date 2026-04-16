@@ -8,11 +8,12 @@ import {
   type InsertProgram, type InsertCourse, type InsertTutorProfile, type InsertBooking, type InsertMessage,
   type InsertQuizAttempt, type BookingPaymentIntent, type EnrollmentPaymentIntent, type VerificationRequest, 
   type Notification, type InsertNotification, type InsertCourseWeek, type InsertCourseContent,
-  type CompletedContent
+  type CompletedContent, type Certificate, type InsertCertificate
 } from "@shared/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+import crypto from "crypto";
 
 // ─── Structured Progress Logger ────────────────────────────────────────────────────
 /**
@@ -138,6 +139,13 @@ export interface IStorage {
   getUnreadNotificationCount(userId: number): Promise<number>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markAllNotificationsRead(userId: number): Promise<void>;
+
+  // Certificates
+  getCertificate(id: number): Promise<Certificate | undefined>;
+  getCertificateByCode(code: string): Promise<Certificate | undefined>;
+  getCertificateForUser(userId: number, courseId?: number, programId?: number): Promise<Certificate | undefined>;
+  getCertificatesForUser(userId: number): Promise<(Certificate & { course?: Course, program?: Program })[]>;
+  createCertificate(data: InsertCertificate): Promise<Certificate>;
 
   // Seeding helpers
   countUsers(): Promise<number>;
@@ -638,6 +646,21 @@ export class DatabaseStorage implements IStorage {
 
   async createQuizAttempt(attempt: { quizId: number; userId: number; scorePercent: number; passed: boolean }): Promise<QuizAttempt> {
     const [newAttempt] = await db.insert(quizAttempts).values(attempt).returning();
+
+    // Trigger progressive recalculation cascade
+    try {
+      const quiz = await this.getQuiz(attempt.quizId);
+      if (quiz) {
+        const [unit] = await db.select().from(courseWeeks).where(eq(courseWeeks.id, quiz.weekId));
+        if (unit) {
+          await this.updateEnrollmentProgress(attempt.userId, unit.courseId);
+        }
+      }
+    } catch (err) {
+      // Log but don't fail the attempt record
+      console.error("[storage] Failed to cascade progress after quiz attempt:", err);
+    }
+
     return newAttempt;
   }
 
@@ -958,6 +981,19 @@ export class DatabaseStorage implements IStorage {
       .insert(completedContent)
       .values({ userId, contentId })
       .onConflictDoNothing();
+
+    // Trigger progressive recalculation cascade
+    try {
+      const [content] = await db.select().from(courseContent).where(eq(courseContent.id, contentId));
+      if (content) {
+        const [unit] = await db.select().from(courseWeeks).where(eq(courseWeeks.id, content.weekId));
+        if (unit) {
+          await this.updateEnrollmentProgress(userId, unit.courseId);
+        }
+      }
+    } catch (err) {
+      console.error("[storage] Failed to cascade progress after lesson completion:", err);
+    }
   }
 
   async isLessonCompleted(userId: number, contentId: number): Promise<boolean> {
@@ -1143,6 +1179,26 @@ export class DatabaseStorage implements IStorage {
         await db.update(enrollments)
           .set(updateData)
           .where(eq(enrollments.id, directEnrollment.id));
+        
+        // ── Automatic Certificate Generation ──────────────────────────────────────
+        if (isCourseComplete) {
+          try {
+            const existingCert = await this.getCertificateForUser(userId, courseId);
+            if (!existingCert) {
+              await this.createCertificate({
+                userId,
+                courseId,
+                issuedAt: new Date(),
+              });
+              progressLog('info', 'certificate_auto_generated', { userId, courseId });
+            }
+          } catch (certErr) {
+            progressLog('error', 'certificate_auto_generation_failed', {
+              userId, courseId, error: (certErr as Error).message,
+            });
+          }
+        }
+
         progressLog('info', 'course_enrollment_updated', {
           userId, courseId,
           progress: progressPercent,
@@ -1249,6 +1305,12 @@ export class DatabaseStorage implements IStorage {
         weekNumber: unit.weekNumber,
         totalLessons: lessons.length,
         completedLessons: lessons.filter(l => completedSet.has(l.id)).length,
+        lessons: lessons.map(l => ({
+          id: l.id,
+          title: l.title,
+          type: l.type,
+          completed: completedSet.has(l.id)
+        })),
         hasQuiz: !!quiz,
         quizPassScore: quiz?.passScorePercent ?? null,
         quizPassed,
@@ -1392,6 +1454,63 @@ export class DatabaseStorage implements IStorage {
       directCourses: courseBreakdowns,
       programs: programBreakdowns,
     };
+  }
+
+  // Certificates Implementation
+  async getCertificate(id: number): Promise<Certificate | undefined> {
+    const [cert] = await db.select().from(certificates).where(eq(certificates.id, id));
+    return cert;
+  }
+
+  async getCertificateByCode(code: string): Promise<Certificate | undefined> {
+    const [cert] = await db.select().from(certificates).where(eq(certificates.code, code));
+    return cert;
+  }
+
+  async getCertificateForUser(userId: number, courseId?: number, programId?: number): Promise<Certificate | undefined> {
+    if (courseId) {
+      const [cert] = await db.select().from(certificates)
+        .where(and(eq(certificates.userId, userId), eq(certificates.courseId, courseId)));
+      return cert;
+    }
+    if (programId) {
+      const [cert] = await db.select().from(certificates)
+        .where(and(eq(certificates.userId, userId), eq(certificates.programId, programId)));
+      return cert;
+    }
+    return undefined;
+  }
+
+  async getCertificatesForUser(userId: number): Promise<(Certificate & { course?: Course, program?: Program })[]> {
+    const certs = await db.select().from(certificates).where(eq(certificates.userId, userId));
+    
+    // Enrich with titles
+    const enriched = await Promise.all(certs.map(async (cert) => {
+      let courseDetails;
+      let programDetails;
+      
+      if (cert.courseId) {
+        courseDetails = await this.getCourse(cert.courseId);
+      }
+      if (cert.programId) {
+        programDetails = await this.getProgram(cert.programId);
+      }
+      
+      return {
+        ...cert,
+        course: courseDetails,
+        program: programDetails
+      };
+    }));
+    
+    return enriched;
+  }
+
+  async createCertificate(data: InsertCertificate): Promise<Certificate> {
+    // Generate secure unique code if not provided
+    const code = data.code || crypto.randomBytes(6).toString('hex').toUpperCase();
+    const [cert] = await db.insert(certificates).values({ ...data, code }).returning();
+    return cert;
   }
 }
 

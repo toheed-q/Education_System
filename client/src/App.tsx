@@ -35,6 +35,7 @@ import AdminLogs from "@/pages/admin/AdminLogs";
 import AdminCourseBuilder from "@/pages/admin/AdminCourseBuilder";
 import EnrollmentCallback from "@/pages/EnrollmentCallback";
 import PaymentCallback from "@/pages/PaymentCallback";
+import VerifyCertificate from "@/pages/VerifyCertificate";
 
 const AdminCoursesNew = () => <AdminCourses autoOpen />;
 const AdminProgramsNew = () => <AdminPrograms autoOpen />;
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/enrollment/callback" component={EnrollmentCallback} />
       <Route path="/payment/callback" component={PaymentCallback} />
+      <Route path="/verify/:code" component={VerifyCertificate} />
       
       {/* Student dashboard routes */}
       <Route path="/dashboard" component={StudentDashboard} />

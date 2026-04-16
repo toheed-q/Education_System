@@ -139,6 +139,7 @@ export const certificates = pgTable("certificates", {
   programId: integer("program_id").references(() => programs.id),
   issuedAt: timestamp("issued_at").defaultNow(),
   code: text("code").notNull().unique(),
+  pdfUrl: text("pdf_url"),
 });
 
 export const tutorProfiles = pgTable("tutor_profiles", {
@@ -368,6 +369,8 @@ export type InsertVerificationRequest = z.infer<typeof insertVerificationRequest
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type CompletedContent = typeof completedContent.$inferSelect;
+export type Certificate = typeof certificates.$inferSelect;
+export type InsertCertificate = typeof certificates.$inferInsert;
 export type SuperCategory = "school_tutoring" | "higher_education" | "professional_skills";
 export type VerificationStatus = "pending" | "approved" | "rejected" | "not_applied";
 

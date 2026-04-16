@@ -16,6 +16,8 @@ import OpenAI from "openai";
 import { verifyFirebaseToken, auth as firebaseAuth } from "./firebaseAdmin";
 import crypto from "crypto";
 import { sendOtpEmail } from "./mail";
+import { generateCertificatePDF } from "./certificates";
+import { type User } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -768,7 +770,21 @@ Only respond with the description text, nothing else.`
       });
 
       if (amount <= 0) {
-        return res.status(400).json({ message: "Course price must be greater than zero for paid enrollment" });
+        // For free courses/programs, bypass Paystack and create enrollment directly
+        await storage.markEnrollmentPaymentIntentPaid(reference);
+        
+        const enrollment = await storage.createEnrollment({
+          userId: user.id,
+          courseId: courseId || undefined,
+          programId: programId || undefined,
+        });
+        
+        return res.json({
+          success: true,
+          isFree: true,
+          enrollment,
+          message: "Free enrollment successful"
+        });
       }
       
       // Initialize Paystack transaction
@@ -1690,16 +1706,8 @@ Only respond with the description text, nothing else.`
       const alreadyCompleted = await storage.isLessonCompleted(userId, lessonId);
       
       // Mark lesson complete (idempotent — safe to call multiple times)
+      // This now automatically triggers updateEnrollmentProgress cascade internally
       await storage.markLessonComplete(userId, lessonId);
-
-      // Cascade: recalculate and persist enrollment progress ONLY if changed
-      if (!alreadyCompleted) {
-        try {
-          await storage.updateEnrollmentProgress(userId, unit.courseId);
-        } catch (cascadeErr) {
-          console.error("[progress/lesson-complete] cascade failed:", cascadeErr);
-        }
-      }
 
       // Return updated progress snapshot
       const progressDetails = await storage.getCourseProgressDetails(userId, unit.courseId);
@@ -2027,6 +2035,7 @@ Only respond with the description text, nothing else.`
       }
     }
 
+    // createQuizAttempt now automatically triggers updateEnrollmentProgress cascade internally
     await storage.createQuizAttempt({
       quizId,
       userId,
@@ -2034,22 +2043,75 @@ Only respond with the description text, nothing else.`
       passed,
     });
 
-    // ── Cascade: recalculate enrollment progress after every quiz submission ──
-    try {
-      const quizWeek = await storage.getWeek(quiz.weekId);
-      if (quizWeek) {
-        await storage.updateEnrollmentProgress(userId, quizWeek.courseId);
-      }
-    } catch (cascadeErr) {
-      // Non-fatal — log and continue so the student still gets their score
-      console.error("[quiz/submit] Progress cascade failed:", cascadeErr);
-    }
-
     res.json({
       scorePercent,
       passed,
       correctAnswers: correct,
       totalQuestions: questions.length,
+    });
+  });
+
+  // ── Certificates Implementation ──
+  app.get(api.certificates.list.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    const certs = await storage.getCertificatesForUser(req.user.id);
+    res.json(certs);
+  });
+
+  app.get(api.certificates.get.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    const courseId = parseInt(req.params.courseId);
+    const cert = await storage.getCertificateForUser(req.user.id, courseId);
+    if (!cert) return res.status(404).send("Certificate not found");
+    res.json(cert);
+  });
+
+  app.get(api.certificates.download.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    const certId = parseInt(req.params.certificateId);
+    const cert = await storage.getCertificate(certId);
+    
+    if (!cert || cert.userId !== req.user.id) {
+      return res.status(404).send("Certificate not found");
+    }
+
+    const course = cert.courseId ? await storage.getCourse(cert.courseId) : null;
+    const program = cert.programId ? await storage.getProgram(cert.programId) : null;
+    
+    try {
+      const pdfBuffer = await generateCertificatePDF({
+        userName: req.user.name || "Student",
+        courseTitle: course?.title || program?.title || "Course",
+        issueDate: cert.issuedAt || new Date(),
+        certificateCode: cert.code,
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=certificate-${cert.code}.pdf`);
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error("[certificates/download] PDF generation failed:", err);
+      res.status(500).send("Failed to generate PDF");
+    }
+  });
+
+  app.get(api.certificates.verify.path, async (req, res) => {
+    const code = req.params.code;
+    const cert = await storage.getCertificateByCode(code);
+    
+    if (!cert) {
+      return res.status(404).json({ valid: false, message: "Invalid verification code" });
+    }
+
+    const user = await storage.getUser(cert.userId);
+    const course = cert.courseId ? await storage.getCourse(cert.courseId) : null;
+    const program = cert.programId ? await storage.getProgram(cert.programId) : null;
+
+    res.json({
+      valid: true,
+      userName: user?.name,
+      courseTitle: course?.title || program?.title,
+      issuedAt: cert.issuedAt,
     });
   });
 

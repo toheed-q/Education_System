@@ -1,6 +1,6 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,9 @@ export default function AdminUsers() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  const roleFilter = searchParams.get("role");
 
   const { data: users, isLoading, refetch, isRefetching } = useQuery<UnifiedUser[]>({
     queryKey: ["/api/admin/users"],
