@@ -183,6 +183,11 @@ export interface IStorage {
   getCourseProgressDetails(userId: number, courseId: number): Promise<any>;
   recalculateAllProgressForUser(userId: number): Promise<{ enrollmentsFixed: number; report: any[] }>;
   getAdminProgressForUser(userId: number): Promise<any>;
+
+  // ─── Admin Analytics ────────────────────────────────────────────────────────
+  getProgramAnalytics(): Promise<any[]>;
+  getCourseAnalytics(programId: number): Promise<any[]>;
+  getQuizAnalytics(programId: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1454,6 +1459,244 @@ export class DatabaseStorage implements IStorage {
       directCourses: courseBreakdowns,
       programs: programBreakdowns,
     };
+  }
+
+  // ─── Admin Analytics ────────────────────────────────────────────────────────
+
+  /**
+   * Returns per-program enrollment stats + completion rates.
+   * All aggregation done in SQL — no per-user loops.
+   * Two queries total: one for program enrollments, one for course enrollments.
+   */
+  async getProgramAnalytics(): Promise<any[]> {
+    // 1. Program-level enrollments + course-level enrollments grouped by program
+    const programStats = await db.execute(sql`
+      SELECT
+        p.id            AS program_id,
+        p.title         AS program_title,
+        -- direct program enrollments
+        COUNT(DISTINCT ep.id)                                              AS prog_enroll,
+        COUNT(DISTINCT ep.id) FILTER (WHERE ep.status = 'completed')      AS prog_completed,
+        COUNT(DISTINCT ep.id) FILTER (WHERE ep.status = 'in_progress')    AS prog_active,
+        COALESCE(AVG(ep.progress) FILTER (WHERE ep.id IS NOT NULL), 0)    AS prog_avg,
+        -- course-level enrollments for courses in this program
+        COUNT(DISTINCT ec.id)                                              AS course_enroll,
+        COUNT(DISTINCT ec.id) FILTER (WHERE ec.status = 'completed')      AS course_completed,
+        COUNT(DISTINCT ec.id) FILTER (WHERE ec.status = 'in_progress')    AS course_active,
+        COALESCE(AVG(ec.progress) FILTER (WHERE ec.id IS NOT NULL), 0)    AS course_avg
+      FROM programs p
+      LEFT JOIN enrollments ep ON ep.program_id = p.id
+      LEFT JOIN courses c      ON c.program_id  = p.id
+      LEFT JOIN enrollments ec ON ec.course_id  = c.id
+      GROUP BY p.id, p.title
+      ORDER BY p.title
+    `);
+
+    // 2. Standalone course enrollments (courses with NO program)
+    const standaloneStats = await db.execute(sql`
+      SELECT
+        COUNT(e.id)                                              AS total_users,
+        COUNT(e.id) FILTER (WHERE e.status = 'completed')       AS completed_users,
+        COUNT(e.id) FILTER (WHERE e.status = 'in_progress')     AS active_users,
+        COALESCE(AVG(e.progress), 0)::int                       AS avg_progress
+      FROM enrollments e
+      JOIN courses c ON c.id = e.course_id
+      WHERE c.program_id IS NULL
+        AND e.course_id IS NOT NULL
+    `);
+
+    const results: any[] = (programStats.rows as any[]).map((row) => {
+      const totalUsers     = Number(row.prog_enroll)    + Number(row.course_enroll);
+      const completedUsers = Number(row.prog_completed) + Number(row.course_completed);
+      const activeUsers    = Number(row.prog_active)    + Number(row.course_active);
+      const completionRate = totalUsers > 0 ? Math.round((completedUsers / totalUsers) * 100) : 0;
+      const avgProgress    = totalUsers > 0
+        ? Math.round(
+            (Number(row.prog_avg) * Number(row.prog_enroll) +
+             Number(row.course_avg) * Number(row.course_enroll)) / totalUsers
+          )
+        : 0;
+      return {
+        programId:    Number(row.program_id),
+        programTitle: row.program_title,
+        isStandalone: false,
+        totalUsers,
+        completedUsers,
+        activeUsers,
+        completionRate,
+        avgProgress,
+      };
+    });
+
+    // Add standalone entry only if there are standalone enrollments
+    const sr = (standaloneStats.rows as any[])[0];
+    const standaloneTotal = Number(sr?.total_users || 0);
+    if (standaloneTotal > 0) {
+      results.push({
+        programId:    -1,
+        programTitle: 'Standalone Courses',
+        isStandalone: true,
+        totalUsers:     standaloneTotal,
+        completedUsers: Number(sr.completed_users),
+        activeUsers:    Number(sr.active_users),
+        completionRate: Math.round((Number(sr.completed_users) / standaloneTotal) * 100),
+        avgProgress:    Number(sr.avg_progress),
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Returns per-course breakdown for a given program.
+   * Single SQL query — no N+1.
+   */
+  async getCourseAnalytics(programId: number): Promise<any[]> {
+    // programId = -1 means standalone courses (no program)
+    const rows = await db.execute(
+      programId === -1
+        ? sql`
+            SELECT
+              c.id            AS course_id,
+              c.title         AS course_title,
+              COUNT(e.id)     AS total_users,
+              COUNT(e.id) FILTER (WHERE e.status = 'completed')   AS completed_users,
+              COUNT(e.id) FILTER (WHERE e.status = 'in_progress') AS active_users,
+              COALESCE(AVG(e.progress), 0)::int                   AS avg_progress
+            FROM courses c
+            LEFT JOIN enrollments e ON e.course_id = c.id
+            WHERE c.program_id IS NULL
+            GROUP BY c.id, c.title
+            ORDER BY c.title
+          `
+        : sql`
+            SELECT
+              c.id            AS course_id,
+              c.title         AS course_title,
+              COUNT(e.id)     AS total_users,
+              COUNT(e.id) FILTER (WHERE e.status = 'completed')   AS completed_users,
+              COUNT(e.id) FILTER (WHERE e.status = 'in_progress') AS active_users,
+              COALESCE(AVG(e.progress), 0)::int                   AS avg_progress
+            FROM courses c
+            LEFT JOIN enrollments e ON e.course_id = c.id
+            WHERE c.program_id = ${programId}
+            GROUP BY c.id, c.title
+            ORDER BY c.title
+          `
+    );
+
+    return (rows.rows as any[]).map((row) => {
+      const totalUsers     = Number(row.total_users);
+      const completedUsers = Number(row.completed_users);
+      const completionRate = totalUsers > 0 ? Math.round((completedUsers / totalUsers) * 100) : 0;
+      return {
+        courseId:      Number(row.course_id),
+        courseTitle:   row.course_title,
+        totalUsers,
+        completedUsers,
+        activeUsers:   Number(row.active_users),
+        avgProgress:   Number(row.avg_progress),
+        completionRate,
+      };
+    });
+  }
+
+  /**
+   * Returns quiz performance stats for all quizzes in a program.
+   * Single SQL query joining quizzes → course_weeks → courses → programs.
+   */
+  async getQuizAnalytics(programId: number): Promise<any> {
+    // programId = -1 means standalone courses (no program)
+    const rows = await db.execute(
+      programId === -1
+        ? sql`
+            SELECT
+              q.id                                          AS quiz_id,
+              q.title                                       AS quiz_title,
+              q.pass_score_percent                          AS pass_threshold,
+              q.is_final_exam                               AS is_final_exam,
+              c.id                                          AS course_id,
+              c.title                                       AS course_title,
+              COUNT(qa.id)                                  AS total_attempts,
+              COUNT(qa.id) FILTER (WHERE qa.passed = true)  AS passed_attempts,
+              COUNT(qa.id) FILTER (WHERE qa.passed = false) AS failed_attempts,
+              COALESCE(AVG(qa.score_percent), 0)::int        AS avg_score
+            FROM quizzes q
+            JOIN course_weeks cw ON cw.id = q.week_id
+            JOIN courses c       ON c.id  = cw.course_id
+            LEFT JOIN quiz_attempts qa ON qa.quiz_id = q.id
+            WHERE c.program_id IS NULL
+            GROUP BY q.id, q.title, q.pass_score_percent, q.is_final_exam, c.id, c.title
+            ORDER BY c.title, q.id
+          `
+        : sql`
+            SELECT
+              q.id                                          AS quiz_id,
+              q.title                                       AS quiz_title,
+              q.pass_score_percent                          AS pass_threshold,
+              q.is_final_exam                               AS is_final_exam,
+              c.id                                          AS course_id,
+              c.title                                       AS course_title,
+              COUNT(qa.id)                                  AS total_attempts,
+              COUNT(qa.id) FILTER (WHERE qa.passed = true)  AS passed_attempts,
+              COUNT(qa.id) FILTER (WHERE qa.passed = false) AS failed_attempts,
+              COALESCE(AVG(qa.score_percent), 0)::int        AS avg_score
+            FROM quizzes q
+            JOIN course_weeks cw ON cw.id = q.week_id
+            JOIN courses c       ON c.id  = cw.course_id
+            LEFT JOIN quiz_attempts qa ON qa.quiz_id = q.id
+            WHERE c.program_id = ${programId}
+            GROUP BY q.id, q.title, q.pass_score_percent, q.is_final_exam, c.id, c.title
+            ORDER BY c.title, q.id
+          `
+    );
+
+    const quizzes = (rows.rows as any[]).map((row) => {
+      const totalAttempts  = Number(row.total_attempts);
+      const passedAttempts = Number(row.passed_attempts);
+      const passRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0;
+      return {
+        quizId:         Number(row.quiz_id),
+        quizTitle:      row.quiz_title,
+        passThreshold:  Number(row.pass_threshold),
+        isFinalExam:    row.is_final_exam,
+        courseId:       Number(row.course_id),
+        courseTitle:    row.course_title,
+        totalAttempts,
+        passedAttempts,
+        failedAttempts: Number(row.failed_attempts),
+        avgScore:       Number(row.avg_score),
+        passRate,
+      };
+    });
+
+    // Aggregate totals across all quizzes in the program
+    const totalAttempts  = quizzes.reduce((s, q) => s + q.totalAttempts, 0);
+    const passedAttempts = quizzes.reduce((s, q) => s + q.passedAttempts, 0);
+    const overallPassRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0;
+    const overallAvgScore = quizzes.length > 0
+      ? Math.round(quizzes.reduce((s, q) => s + q.avgScore, 0) / quizzes.length)
+      : 0;
+
+    // Top performing courses = highest pass rate among courses with attempts
+    const courseMap = new Map<number, { courseTitle: string; passed: number; total: number }>();
+    for (const q of quizzes) {
+      const existing = courseMap.get(q.courseId) || { courseTitle: q.courseTitle, passed: 0, total: 0 };
+      existing.passed += q.passedAttempts;
+      existing.total  += q.totalAttempts;
+      courseMap.set(q.courseId, existing);
+    }
+    const topCourses = Array.from(courseMap.entries())
+      .filter(([, v]) => v.total > 0)
+      .map(([courseId, v]) => ({
+        courseId,
+        courseTitle: v.courseTitle,
+        passRate: Math.round((v.passed / v.total) * 100),
+      }))
+      .sort((a, b) => b.passRate - a.passRate)
+      .slice(0, 5);
+
+    return { quizzes, totalAttempts, passedAttempts, overallPassRate, overallAvgScore, topCourses };
   }
 
   // Certificates Implementation

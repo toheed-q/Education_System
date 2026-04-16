@@ -15,7 +15,8 @@ import {
   Shield,
   Settings,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  BarChart3
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
@@ -38,6 +39,11 @@ export default function AdminDashboard() {
     enabled: !!user,
   });
 
+  const { data: analyticsData } = useQuery<any[]>({
+    queryKey: ["/api/admin/analytics/programs"],
+    enabled: !!user,
+  });
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -52,6 +58,9 @@ export default function AdminDashboard() {
   }
 
   const isSuperAdmin = user.role === 'super_admin';
+  const totalEnrolled  = analyticsData?.reduce((s, p) => s + p.totalUsers, 0) ?? 0;
+  const totalCompleted = analyticsData?.reduce((s, p) => s + p.completedUsers, 0) ?? 0;
+  const overallRate    = totalEnrolled > 0 ? Math.round((totalCompleted / totalEnrolled) * 100) : 0;
   const programsCount = (programs as any[])?.length || 0;
   const coursesCount = (courses as any[])?.length || 0;
   const tutorsCount = (tutors as any[])?.length || 0;
@@ -149,6 +158,15 @@ export default function AdminDashboard() {
               <CardDescription>Common administrative tasks</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <Link href="/admin/analytics">
+                <Button variant="outline" className="w-full justify-between" data-testid="button-view-analytics">
+                  <span className="flex items-center">
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    View Analytics
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
               <Link href="/admin/users">
                 <Button variant="outline" className="w-full justify-between" data-testid="button-manage-users">
                   <span className="flex items-center">
@@ -192,32 +210,48 @@ export default function AdminDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Platform Analytics</CardTitle>
-              <CardDescription>Overview of platform activity</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Platform Analytics</CardTitle>
+                  <CardDescription>Live enrollment and completion data</CardDescription>
+                </div>
+                <Link href="/admin/analytics">
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <BarChart3 className="w-4 h-4" />
+                    Full Report
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <TrendingUp className="w-5 h-5 text-green-600" />
-                    <span className="text-sm font-medium">Total Revenue</span>
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm font-medium">Total Enrollments</span>
                   </div>
-                  <span className="font-bold">KES 0</span>
+                  <span className="font-bold">{totalEnrolled}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                    <span className="text-sm font-medium">Bookings This Month</span>
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <span className="text-sm font-medium">Completed</span>
                   </div>
-                  <span className="font-bold">0</span>
+                  <span className="font-bold">{totalCompleted}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-purple-600" />
-                    <span className="text-sm font-medium">New Users This Month</span>
+                    <TrendingUp className="w-5 h-5 text-purple-600" />
+                    <span className="text-sm font-medium">Overall Completion Rate</span>
                   </div>
-                  <span className="font-bold">0</span>
+                  <span className="font-bold">{overallRate}%</span>
                 </div>
+                <Link href="/admin/analytics">
+                  <Button className="w-full mt-1 bg-purple-600 hover:bg-purple-700 gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Open Full Analytics Dashboard
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>

@@ -2172,6 +2172,57 @@ Only respond with the description text, nothing else.`
     });
   });
 
+  // ── Admin Analytics Endpoints ──
+
+  // GET /api/admin/analytics/programs
+  // Returns per-program enrollment counts + completion rates
+  app.get('/api/admin/analytics/programs', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+    try {
+      const data = await storage.getProgramAnalytics();
+      res.json(data);
+    } catch (err) {
+      console.error('[analytics/programs]', err);
+      res.status(500).json({ message: 'Failed to load program analytics' });
+    }
+  });
+
+  // GET /api/admin/analytics/courses/:programId
+  // Returns course-level breakdown for a specific program
+  app.get('/api/admin/analytics/courses/:programId', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+    const programId = Number(req.params.programId);
+    if (isNaN(programId)) return res.status(400).json({ message: 'Invalid programId' });
+    try {
+      const data = await storage.getCourseAnalytics(programId);
+      res.json(data);
+    } catch (err) {
+      console.error('[analytics/courses]', err);
+      res.status(500).json({ message: 'Failed to load course analytics' });
+    }
+  });
+
+  // GET /api/admin/analytics/quizzes/:programId
+  // Returns quiz performance stats for all quizzes in a program
+  app.get('/api/admin/analytics/quizzes/:programId', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    const user = req.user as any;
+    if (!['admin', 'super_admin'].includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+    const programId = Number(req.params.programId);
+    if (isNaN(programId)) return res.status(400).json({ message: 'Invalid programId' });
+    try {
+      const data = await storage.getQuizAnalytics(programId);
+      res.json(data);
+    } catch (err) {
+      console.error('[analytics/quizzes]', err);
+      res.status(500).json({ message: 'Failed to load quiz analytics' });
+    }
+  });
+
   // ── Certificate Template Management (Admin) ──
   app.use('/certificate_templates', (req, res, next) => {
     if (!req.isAuthenticated()) return res.status(401).send('Unauthorized');
